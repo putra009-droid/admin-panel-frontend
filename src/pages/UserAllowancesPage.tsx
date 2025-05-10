@@ -2,14 +2,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import UserAllowanceForm from '../components/UserAllowanceForm';
+import UserAllowanceForm from '../components/UserAllowanceForm'; // Pastikan path ini benar
+
+// Ambil API_BASE_URL dari environment variable Vite
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 // Tipe data untuk UserAllowance yang diterima dari API
 interface UserAllowance {
   id: string;
   userId: string;
   allowanceTypeId: string;
-  amount: string;
+  amount: string; // API mengembalikan string (hasil serialisasi Decimal)
   allowanceType: {
     id: string;
     name: string;
@@ -34,6 +37,13 @@ interface UserAllowanceFormData {
     amount: string;
 }
 
+// Tipe untuk respons error umum dari API
+interface ApiErrorResponse {
+  message?: string;
+  error?: string;
+}
+
+
 function UserAllowancesPage() {
   const { userId } = useParams<{ userId: string }>();
   const { accessToken } = useAuth();
@@ -50,9 +60,9 @@ function UserAllowancesPage() {
   const [editingData, setEditingData] = useState<UserAllowanceFormData | null>(null);
 
   const fetchUserName = useCallback(async () => {
-    if (!accessToken || !userId) return;
+    if (!accessToken || !userId || !API_BASE_URL) return;
     try {
-      const response = await fetch(`/api/admin/users/${userId}`, {
+      const response = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
         headers: { 'Authorization': `Bearer ${accessToken}` },
       });
       if (!response.ok) throw new Error('Gagal mengambil data pengguna.');
@@ -62,31 +72,32 @@ function UserAllowancesPage() {
       console.error("Gagal mengambil nama pengguna:", err);
       setUserName(`User ID: ${userId}`);
     }
-  }, [accessToken, userId]);
+  }, [accessToken, userId, API_BASE_URL]);
 
   const fetchAvailableAllowanceTypes = useCallback(async () => {
-    if (!accessToken) return;
+    if (!accessToken || !API_BASE_URL) return;
     console.log('UserAllowancesPage: Fetching available allowance types...');
     try {
-      const response = await fetch('/api/admin/allowance-types', {
+      const response = await fetch(`${API_BASE_URL}/admin/allowance-types`, {
         headers: { 'Authorization': `Bearer ${accessToken}` },
       });
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.message || `Gagal mengambil tipe tunjangan. Status: ${response.status}`);
+        const errData = await response.json().catch(() => ({})) as ApiErrorResponse;
+        throw new Error(errData.message || errData.error || `Gagal mengambil tipe tunjangan. Status: ${response.status}`);
       }
-      const data: AllowanceTypeOption[] = await response.json();
-      setAvailableAllowanceTypes(data);
-      console.log('UserAllowancesPage: Available allowance types fetched:', data);
+      // Asumsi API mengembalikan array objek AllowanceType dengan id, name, isFixed
+      const dataFromApi: AllowanceTypeOption[] = await response.json();
+      setAvailableAllowanceTypes(dataFromApi || []);
+      console.log('UserAllowancesPage: Available allowance types fetched:', dataFromApi);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan saat mengambil tipe tunjangan.';
       setError(prev => prev ? `${prev}\n${errorMessage}` : errorMessage);
     }
-  }, [accessToken]);
+  }, [accessToken, API_BASE_URL]);
 
   const fetchUserAllowances = useCallback(async () => {
-    if (!accessToken || !userId) {
-      setError('Parameter tidak lengkap atau token tidak tersedia.');
+    if (!accessToken || !userId || !API_BASE_URL) {
+      setError('Parameter tidak lengkap atau token/URL API tidak tersedia.');
       setIsLoading(false);
       return;
     }
@@ -94,23 +105,24 @@ function UserAllowancesPage() {
     setError(null);
     console.log(`UserAllowancesPage: Fetching allowances for user ID: ${userId}`);
     try {
-      const response = await fetch(`/api/admin/users/${userId}/allowances`, {
+      const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/allowances`, {
         headers: { 'Authorization': `Bearer ${accessToken}` },
       });
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.message || `Gagal mengambil tunjangan pengguna. Status: ${response.status}`);
+        const errData = await response.json().catch(() => ({})) as ApiErrorResponse;
+        throw new Error(errData.message || errData.error || `Gagal mengambil tunjangan pengguna. Status: ${response.status}`);
       }
-      const data: UserAllowance[] = await response.json();
-      setUserAllowances(data);
-      console.log('UserAllowancesPage: User allowances fetched:', data);
+      const data: { data: UserAllowance[] } = await response.json(); // Asumsi API membungkus dalam 'data'
+      setUserAllowances(data.data || []);
+      console.log('UserAllowancesPage: User allowances fetched:', data.data);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan.';
       setError(errorMessage);
+      setUserAllowances([]);
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken, userId]);
+  }, [accessToken, userId, API_BASE_URL]);
 
   useEffect(() => {
     if (userId && accessToken) {
@@ -122,7 +134,7 @@ function UserAllowancesPage() {
 
   const handleAdd = () => {
     if (availableAllowanceTypes.length === 0) {
-        alert("Tidak ada tipe tunjangan yang tersedia untuk ditambahkan. Silakan tambahkan tipe tunjangan terlebih dahulu di menu 'Kelola Tipe Tunjangan'.");
+        alert("Tidak ada tipe tunjangan yang tersedia. Tambahkan dulu di 'Kelola Tipe Tunjangan'.");
         return;
     }
     setEditingData(null);
@@ -142,17 +154,18 @@ function UserAllowancesPage() {
   };
 
   const handleDelete = async (userAllowanceId: string, allowanceName: string) => {
+    if (!API_BASE_URL) { setError('URL API tidak ditemukan.'); return; }
     if (window.confirm(`Yakin ingin menghapus tunjangan "${allowanceName}" untuk pengguna ini?`)) {
       setError(null);
       if (!accessToken || !userId) { setError('Token atau User ID tidak ditemukan.'); return; }
       try {
-        const response = await fetch(`/api/admin/users/${userId}/allowances/${userAllowanceId}`, {
+        const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/allowances/${userAllowanceId}`, {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${accessToken}` },
         });
         if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.message || `Gagal menghapus tunjangan. Status: ${response.status}`);
+          const errData = await response.json().catch(() => ({})) as ApiErrorResponse;
+          throw new Error(errData.message || errData.error || `Gagal menghapus tunjangan. Status: ${response.status}`);
         }
         alert(`Tunjangan "${allowanceName}" berhasil dihapus.`);
         fetchUserAllowances();
@@ -164,6 +177,11 @@ function UserAllowancesPage() {
   };
 
   const handleFormSubmit = async (formData: UserAllowanceFormData) => {
+    if (!API_BASE_URL) { 
+        setError('URL API tidak ditemukan.'); 
+        setIsSubmitting(false); 
+        throw new Error('URL API tidak ditemukan.');
+    }
     setIsSubmitting(true);
     setError(null);
     if (!accessToken || !userId) {
@@ -174,8 +192,8 @@ function UserAllowancesPage() {
 
     const isEditMode = !!formData.id;
     const url = isEditMode 
-        ? `/api/admin/users/${userId}/allowances/${formData.id}` 
-        : `/api/admin/users/${userId}/allowances`;
+        ? `${API_BASE_URL}/admin/users/${userId}/allowances/${formData.id}` 
+        : `${API_BASE_URL}/admin/users/${userId}/allowances`;
     const method = isEditMode ? 'PUT' : 'POST';
 
     const bodyToSubmit = {
@@ -196,8 +214,8 @@ function UserAllowancesPage() {
       });
 
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.message || `Gagal submit. Status: ${response.status}`);
+        const errData = await response.json().catch(() => ({})) as ApiErrorResponse;
+        throw new Error(errData.message || errData.error || `Gagal submit. Status: ${response.status}`);
       }
       alert(`Tunjangan pengguna berhasil ${isEditMode ? 'diperbarui' : 'ditambahkan'}!`);
       setShowForm(false);
@@ -256,8 +274,8 @@ function UserAllowancesPage() {
             {userAllowances.length === 0 ? (
               <tr><td colSpan={4} style={styles.tableCellCenter}>Tidak ada tunjangan yang ditetapkan untuk pengguna ini.</td></tr>
             ) : (
-              userAllowances.map((ua) => (
-                <tr key={ua.id} style={styles.tableRow}>
+              userAllowances.map((ua, index) => (
+                <tr key={ua.id} style={{...styles.tableRow, backgroundColor: index % 2 === 0 ? '#f9f9f9' : 'white'}}>
                   <td style={styles.tableCell}>{ua.allowanceType?.name || 'Tipe Dihapus'}</td>
                   <td style={styles.tableCell}>{ua.allowanceType?.description || '-'}</td>
                   <td style={styles.tableCellRight}>{parseFloat(ua.amount).toLocaleString('id-ID')}</td>
@@ -272,10 +290,9 @@ function UserAllowancesPage() {
         </table>
       )}
 
-      {showForm && userId && ( // Pastikan userId ada sebelum render form
+      {showForm && userId && (
         <UserAllowanceForm
-          // **PERBAIKAN: Hapus prop userId dari sini**
-          // userId={userId} 
+          // userId={userId} // Tidak perlu dikirim lagi
           initialData={editingData}
           availableAllowanceTypes={availableAllowanceTypes}
           onSubmit={handleFormSubmit}

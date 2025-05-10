@@ -1,7 +1,7 @@
 // src/pages/AllowanceTypesPage.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import AllowanceTypeForm from '../components/AllowanceTypeForm'; // Impor form
+import AllowanceTypeForm from '../components/AllowanceTypeForm'; // Pastikan path ini benar
 
 // Tipe data untuk Tipe Tunjangan dari API
 interface AllowanceType {
@@ -9,8 +9,8 @@ interface AllowanceType {
   name: string;
   description: string | null;
   isFixed: boolean;
-  createdAt?: string; // Opsional, tergantung API
-  updatedAt?: string; // Opsional
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // Tipe data untuk form (cocokkan dengan AllowanceTypeForm)
@@ -31,19 +31,23 @@ function AllowanceTypesPage() {
   const [showForm, setShowForm] = useState<boolean>(false);
   const [editingData, setEditingData] = useState<AllowanceTypeFormData | null>(null);
 
-  // Fungsi untuk mengambil data tipe tunjangan
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
   const fetchAllowanceTypes = useCallback(async () => {
     if (!accessToken) {
-      setError('Token autentikasi tidak tersedia. Silakan login ulang.');
+      setError('Token autentikasi tidak tersedia.');
       setIsLoading(false);
-      console.error('AllowanceTypesPage: Token tidak ditemukan dari context.');
       return;
+    }
+    if (!API_BASE_URL) {
+        setError('Konfigurasi URL API tidak ditemukan.');
+        setIsLoading(false);
+        return;
     }
     setIsLoading(true);
     setError(null);
-    console.log('AllowanceTypesPage: Fetching allowance types...');
     try {
-      const response = await fetch('/api/admin/allowance-types', {
+      const response = await fetch(`${API_BASE_URL}/admin/allowance-types`, {
         headers: { 'Authorization': `Bearer ${accessToken}` },
       });
       if (!response.ok) {
@@ -58,7 +62,7 @@ function AllowanceTypesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken]);
+  }, [accessToken, API_BASE_URL]);
 
   useEffect(() => {
     fetchAllowanceTypes();
@@ -83,11 +87,15 @@ function AllowanceTypesPage() {
   };
 
   const handleDelete = async (id: string, name: string) => {
+    if (!API_BASE_URL) {
+        setError('Konfigurasi URL API tidak ditemukan.');
+        return;
+    }
     if (window.confirm(`Yakin ingin menghapus tipe tunjangan "${name}"?`)) {
       setError(null);
       if (!accessToken) { setError('Token tidak ditemukan.'); return; }
       try {
-        const response = await fetch(`/api/admin/allowance-types/${id}`, {
+        const response = await fetch(`${API_BASE_URL}/admin/allowance-types/${id}`, {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${accessToken}` },
         });
@@ -105,6 +113,11 @@ function AllowanceTypesPage() {
   };
 
   const handleFormSubmit = async (formData: AllowanceTypeFormData) => {
+    if (!API_BASE_URL) {
+        setError('Konfigurasi URL API tidak ditemukan.');
+        setIsSubmitting(false);
+        throw new Error('Konfigurasi URL API tidak ditemukan.');
+    }
     setIsSubmitting(true);
     setError(null);
     if (!accessToken) {
@@ -114,7 +127,7 @@ function AllowanceTypesPage() {
     }
 
     const isEditMode = !!formData.id;
-    const url = isEditMode ? `/api/admin/allowance-types/${formData.id}` : '/api/admin/allowance-types';
+    const url = isEditMode ? `${API_BASE_URL}/admin/allowance-types/${formData.id}` : `${API_BASE_URL}/admin/allowance-types`;
     const method = isEditMode ? 'PUT' : 'POST';
 
     const bodyToSubmit = {
@@ -143,7 +156,7 @@ function AllowanceTypesPage() {
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan.';
       setError(`Gagal submit: ${errorMessage}`);
-      throw err;
+      throw err; // Lempar error agar UserForm bisa menangkapnya
     } finally {
       setIsSubmitting(false);
     }
@@ -155,21 +168,15 @@ function AllowanceTypesPage() {
     setError(null);
   };
 
-  if (isLoading && !showForm) {
-    return <div style={styles.container}>Memuat tipe tunjangan...</div>;
-  }
-
-  if (error && !showForm) {
-    return <div style={styles.container}><p style={styles.errorText}>Error: {error}</p></div>;
-  }
+  if (isLoading && !showForm) return <div style={styles.container}>Memuat tipe tunjangan...</div>;
+  if (error && !showForm) return <div style={styles.container}><p style={styles.errorText}>Error: {error}</p></div>;
 
   return (
     <div style={styles.container}>
       <h2 style={styles.title}>Manajemen Tipe Tunjangan</h2>
-      
       <div style={styles.actionBar}>
-        <p>Total Tipe Tunjangan: {allowanceTypes.length}</p>
-        <button onClick={handleAdd} style={styles.addButton} disabled={isLoading || showForm}>
+        <p>Total Tipe: {allowanceTypes.length}</p>
+        <button onClick={handleAdd} style={styles.addButton} disabled={showForm || isLoading}>
           + Tambah Tipe Tunjangan
         </button>
       </div>
@@ -181,16 +188,16 @@ function AllowanceTypesPage() {
             <tr>
               <th style={styles.tableHeader}>Nama</th>
               <th style={styles.tableHeader}>Deskripsi</th>
-              <th style={styles.tableHeader}>Bersifat Tetap?</th>
+              <th style={styles.tableHeader}>Tetap?</th>
               <th style={styles.tableHeader}>Aksi</th>
             </tr>
           </thead>
           <tbody>
             {allowanceTypes.length === 0 ? (
-              <tr><td colSpan={4} style={styles.tableCellCenter}>Tidak ada data tipe tunjangan.</td></tr>
+              <tr><td colSpan={4} style={styles.tableCellCenter}>Tidak ada data.</td></tr>
             ) : (
               allowanceTypes.map((item) => (
-                <tr key={item.id} style={styles.tableRow}>
+                <tr key={item.id} style={{...styles.tableRow, backgroundColor: allowanceTypes.indexOf(item) % 2 === 0 ? '#f9f9f9' : 'white'}}>
                   <td style={styles.tableCell}>{item.name}</td>
                   <td style={styles.tableCell}>{item.description || '-'}</td>
                   <td style={styles.tableCellCenter}>{item.isFixed ? 'Ya' : 'Tidak'}</td>
@@ -217,6 +224,7 @@ function AllowanceTypesPage() {
   );
 }
 
+// Styling
 const styles: { [key: string]: React.CSSProperties } = {
   container: { padding: '20px', fontFamily: 'sans-serif' },
   title: { marginBottom: '20px', color: '#333' },
@@ -225,7 +233,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   table: { width: '100%', borderCollapse: 'collapse', fontSize: '14px', border: '1px solid #dee2e6' },
   tableHead: { backgroundColor: '#f8f9fa' },
   tableHeader: { padding: '10px', border: '1px solid #dee2e6', textAlign: 'left', fontWeight: 'bold' },
-  tableRow: { /* Styling untuk zebra-striping bisa ditambahkan dengan CSS */ },
+  tableRow: { /* Styling dasar untuk baris */ },
   tableCell: { padding: '10px', border: '1px solid #dee2e6', verticalAlign: 'middle' },
   tableCellCenter: { padding: '10px', border: '1px solid #dee2e6', textAlign: 'center', verticalAlign: 'middle' },
   actionButton: { marginRight: '5px', padding: '4px 8px', fontSize: '12px', border: 'none', borderRadius: '3px', cursor: 'pointer', color: 'white' },

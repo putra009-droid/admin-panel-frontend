@@ -1,27 +1,29 @@
 // src/pages/LeaveRequestApprovalPage.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-// Hapus impor Link jika tidak digunakan di halaman ini
-// import { Link } from 'react-router-dom'; 
+// import { Link } from 'react-router-dom'; // Tidak digunakan di sini
+
+// Ambil API_BASE_URL dari environment variable Vite
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 // Tipe data untuk LeaveRequest yang diterima dari API
-// Sesuaikan dengan struktur data yang dikembalikan oleh backend Anda
 interface LeaveRequest {
   id: string;
   userId: string;
-  user: { // Detail pengguna yang mengajukan
+  user: { 
     name: string;
     email: string;
   };
-  leaveType: { // Detail tipe izin
-    id: string;
-    name: string;
-    deductsLeaveBalance: boolean;
-  };
+  leaveType: string; // Di backend Anda, leaveType adalah AttendanceStatus (enum string)
+  // Jika leaveType adalah objek relasi di backend, sesuaikan di sini
+  // leaveType: { 
+  //   id: string;
+  //   name: string;
+  // };
   startDate: string;
   endDate: string;
   reason: string;
-  status: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'CANCELLED'; // Sesuaikan dengan enum StatusCuti Anda
+  status: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
   approvedBy?: string | null;
   approvedAt?: string | null;
   rejectedBy?: string | null;
@@ -30,17 +32,22 @@ interface LeaveRequest {
   createdAt: string;
 }
 
+// Tipe untuk respons error umum dari API
+interface ApiErrorResponse {
+  message?: string;
+  error?: string;
+}
+
 function LeaveRequestApprovalPage() {
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [actionLoading, setActionLoading] = useState<{[key: string]: boolean}>({}); // Untuk loading per tombol aksi
-  const { accessToken, user: adminUser } = useAuth(); // Ambil user admin untuk cek role jika perlu
+  const [actionLoading, setActionLoading] = useState<{[key: string]: boolean}>({});
+  const { accessToken, user: adminUser } = useAuth();
 
-  // Fungsi untuk mengambil data pengajuan izin yang pending
   const fetchPendingLeaveRequests = useCallback(async () => {
-    if (!accessToken) {
-      setError('Token autentikasi tidak tersedia.');
+    if (!accessToken || !API_BASE_URL) {
+      setError('Token atau URL API tidak tersedia.');
       setIsLoading(false);
       return;
     }
@@ -48,23 +55,24 @@ function LeaveRequestApprovalPage() {
     setError(null);
     console.log('LeaveRequestApprovalPage: Fetching pending leave requests...');
     try {
-      const response = await fetch('/api/yayasan/leave-requests?status=PENDING_APPROVAL', {
+      const response = await fetch(`${API_BASE_URL}/yayasan/leave-requests?status=PENDING_APPROVAL`, {
         headers: { 'Authorization': `Bearer ${accessToken}` },
       });
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.message || `Gagal mengambil data pengajuan izin. Status: ${response.status}`);
+        const errData = await response.json().catch(() => ({})) as ApiErrorResponse;
+        throw new Error(errData.message || errData.error || `Gagal mengambil data pengajuan izin. Status: ${response.status}`);
       }
-      const data: LeaveRequest[] = await response.json();
-      setLeaveRequests(data);
-      console.log('LeaveRequestApprovalPage: Pending leave requests fetched successfully:', data);
+      const data: { data: LeaveRequest[] } = await response.json(); // Asumsi API membungkus dalam 'data'
+      setLeaveRequests(data.data || []);
+      console.log('LeaveRequestApprovalPage: Pending leave requests fetched successfully:', data.data);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan.';
       setError(errorMessage);
+      setLeaveRequests([]);
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken]);
+  }, [accessToken, API_BASE_URL]);
 
   useEffect(() => {
     if (adminUser && (adminUser.role === 'YAYASAN' || adminUser.role === 'SUPER_ADMIN')) {
@@ -75,8 +83,8 @@ function LeaveRequestApprovalPage() {
     }
   }, [fetchPendingLeaveRequests, adminUser]);
 
-  // Fungsi untuk menangani aksi approve atau reject
   const handleLeaveRequestAction = async (leaveRequestId: string, action: 'approve' | 'reject') => {
+    if (!API_BASE_URL) { setError('URL API tidak ditemukan.'); return; }
     setActionLoading(prev => ({ ...prev, [leaveRequestId]: true }));
     setError(null);
     if (!accessToken) {
@@ -90,7 +98,7 @@ function LeaveRequestApprovalPage() {
         rejectionReason = window.prompt("Masukkan alasan penolakan (opsional):");
     }
 
-    const url = `/api/yayasan/leave-requests/${leaveRequestId}/${action}`;
+    const url = `${API_BASE_URL}/yayasan/leave-requests/${leaveRequestId}/${action}`;
     const body: { rejectionReason?: string } = {};
     if (action === 'reject' && rejectionReason && rejectionReason.trim() !== '') {
         body.rejectionReason = rejectionReason;
@@ -99,7 +107,7 @@ function LeaveRequestApprovalPage() {
     console.log(`LeaveRequestApprovalPage: Performing action '${action}' for leave request ID: ${leaveRequestId}`);
     try {
       const response = await fetch(url, {
-        method: 'PUT',
+        method: 'PUT', // API Anda menggunakan PUT untuk approve/reject
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
@@ -108,11 +116,11 @@ function LeaveRequestApprovalPage() {
       });
 
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.message || `Gagal ${action === 'approve' ? 'menyetujui' : 'menolak'} pengajuan. Status: ${response.status}`);
+        const errData = await response.json().catch(() => ({})) as ApiErrorResponse;
+        throw new Error(errData.message || errData.error || `Gagal ${action === 'approve' ? 'menyetujui' : 'menolak'} pengajuan. Status: ${response.status}`);
       }
       alert(`Pengajuan izin berhasil ${action === 'approve' ? 'disetujui' : 'ditolak'}.`);
-      fetchPendingLeaveRequests(); // Refresh daftar setelah aksi
+      fetchPendingLeaveRequests();
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan.';
       setError(`Gagal aksi: ${errorMessage}`);
@@ -147,10 +155,11 @@ function LeaveRequestApprovalPage() {
             </tr>
           </thead>
           <tbody>
-            {leaveRequests.map((req) => (
-              <tr key={req.id} style={styles.tableRow}>
+            {leaveRequests.map((req, index) => (
+              <tr key={req.id} style={{...styles.tableRow, backgroundColor: index % 2 === 0 ? '#f9f9f9' : 'white'}}>
                 <td style={styles.tableCell}>{req.user?.name || req.userId}</td>
-                <td style={styles.tableCell}>{req.leaveType?.name || (req.leaveType?.id ? `ID: ${req.leaveType.id}` : 'N/A')}</td>
+                {/* Di backend, leaveType adalah enum AttendanceStatus, jadi kita tampilkan langsung */}
+                <td style={styles.tableCell}>{req.leaveType ? req.leaveType.replace(/_/g, ' ') : 'N/A'}</td>
                 <td style={styles.tableCell}>{new Date(req.startDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
                 <td style={styles.tableCell}>{new Date(req.endDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
                 <td style={styles.tableCell}>{req.reason}</td>
@@ -179,7 +188,6 @@ function LeaveRequestApprovalPage() {
   );
 }
 
-// Styling (bisa disamakan atau disesuaikan)
 const styles: { [key: string]: React.CSSProperties } = {
   container: { padding: '20px', fontFamily: 'sans-serif' },
   title: { marginBottom: '20px', color: '#333' },

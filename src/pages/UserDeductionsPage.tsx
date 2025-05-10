@@ -1,24 +1,25 @@
 // src/pages/UserDeductionsPage.tsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom'; // Import useParams untuk mengambil userId dari URL
+import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import UserDeductionForm from '../components/UserDeductionForm'; // Impor form yang sudah kita buat
-// Impor TIPE DeductionCalculationType dan NILAI DeductionCalculationTypeValue
+import UserDeductionForm from '../components/UserDeductionForm';
 import type { DeductionCalculationType } from '../types/deductionTypes';
-import { DeductionCalculationTypeValue } from '../types/deductionTypes';
+import { DeductionCalculationTypeValue } from '../types/deductionTypes'; // Untuk logika di handleFormSubmit
+
+// Ambil API_BASE_URL dari environment variable Vite
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 // Tipe data untuk UserDeduction yang diterima dari API
 interface UserDeduction {
-  id: string; // ID dari UserDeduction
+  id: string;
   userId: string;
   deductionTypeId: string;
-  // Nilai ini akan spesifik berdasarkan calculationType dari DeductionType terkait
-  assignedAmount: string | null; // API mungkin mengembalikan string (hasil serialisasi Decimal)
-  assignedPercentage: string | null; // API mungkin mengembalikan string
-  deductionType: { // Detail dari DeductionType
+  assignedAmount: string | null;
+  assignedPercentage: string | null;
+  deductionType: {
     id: string;
     name: string;
-    calculationType: DeductionCalculationType; // Ini adalah tipe string literal
+    calculationType: DeductionCalculationType;
     description?: string | null;
   };
   createdAt?: string;
@@ -29,37 +30,42 @@ interface UserDeduction {
 interface DeductionTypeOption {
   id: string;
   name: string;
-  calculationType: DeductionCalculationType; // Ini adalah tipe string literal
+  calculationType: DeductionCalculationType;
 }
 
 // Tipe data untuk data yang dikirim ke/dari UserDeductionForm
 interface UserDeductionFormData {
-    id?: string; // ID UserDeduction (hanya ada saat edit)
+    id?: string;
     deductionTypeId: string;
     assignedAmount?: string | null;
     assignedPercentage?: string | null;
 }
 
+// Tipe untuk respons error umum dari API
+interface ApiErrorResponse {
+  message?: string;
+  error?: string;
+}
+
 function UserDeductionsPage() {
-  const { userId } = useParams<{ userId: string }>(); // Ambil userId dari parameter URL
+  const { userId } = useParams<{ userId: string }>();
   const { accessToken } = useAuth();
 
-  const [userName, setUserName] = useState<string>(''); // Untuk menampilkan nama pengguna
+  const [userName, setUserName] = useState<string>('');
   const [userDeductions, setUserDeductions] = useState<UserDeduction[]>([]);
   const [availableDeductionTypes, setAvailableDeductionTypes] = useState<DeductionTypeOption[]>([]);
   
-  const [isLoading, setIsLoading] = useState<boolean>(true); // Loading untuk data utama halaman
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false); // Loading untuk submit form
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const [showForm, setShowForm] = useState<boolean>(false);
   const [editingData, setEditingData] = useState<UserDeductionFormData | null>(null);
 
-  // Fungsi untuk mengambil nama pengguna
   const fetchUserName = useCallback(async () => {
-    if (!accessToken || !userId) return;
+    if (!accessToken || !userId || !API_BASE_URL) return;
     try {
-      const response = await fetch(`/api/admin/users/${userId}`, {
+      const response = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
         headers: { 'Authorization': `Bearer ${accessToken}` },
       });
       if (!response.ok) throw new Error('Gagal mengambil data pengguna.');
@@ -67,25 +73,23 @@ function UserDeductionsPage() {
       setUserName(userData.name || `User ID: ${userId}`);
     } catch (err) {
       console.error("Gagal mengambil nama pengguna:", err);
-      setUserName(`User ID: ${userId}`); // Fallback jika gagal
+      setUserName(`User ID: ${userId}`);
     }
-  }, [accessToken, userId]);
+  }, [accessToken, userId, API_BASE_URL]);
 
-  // Fungsi untuk mengambil semua tipe potongan yang tersedia (untuk dropdown form)
   const fetchAvailableDeductionTypes = useCallback(async () => {
-    if (!accessToken) return;
+    if (!accessToken || !API_BASE_URL) return;
     console.log('UserDeductionsPage: Fetching available deduction types...');
     try {
-      const response = await fetch('/api/admin/deduction-types', {
+      const response = await fetch(`${API_BASE_URL}/admin/deduction-types`, {
         headers: { 'Authorization': `Bearer ${accessToken}` },
       });
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.message || `Gagal mengambil tipe potongan. Status: ${response.status}`);
+        const errData = await response.json().catch(() => ({})) as ApiErrorResponse;
+        throw new Error(errData.message || errData.error || `Gagal mengambil tipe potongan. Status: ${response.status}`);
       }
-      // Ambil hanya field yang diperlukan untuk DeductionTypeOption
       const dataFromApi: Array<{id: string, name: string, calculationType: DeductionCalculationType}> = await response.json();
-      setAvailableDeductionTypes(dataFromApi.map(dt => ({
+      setAvailableDeductionTypes((dataFromApi || []).map(dt => ({
         id: dt.id,
         name: dt.name,
         calculationType: dt.calculationType,
@@ -95,12 +99,11 @@ function UserDeductionsPage() {
       const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan saat mengambil tipe potongan.';
       setError(prev => prev ? `${prev}\n${errorMessage}` : errorMessage);
     }
-  }, [accessToken]);
+  }, [accessToken, API_BASE_URL]);
 
-  // Fungsi untuk mengambil potongan yang sudah ditetapkan untuk pengguna ini
   const fetchUserDeductions = useCallback(async () => {
-    if (!accessToken || !userId) {
-      setError('Parameter tidak lengkap atau token tidak tersedia.');
+    if (!accessToken || !userId || !API_BASE_URL) {
+      setError('Parameter tidak lengkap atau token/URL API tidak tersedia.');
       setIsLoading(false);
       return;
     }
@@ -108,25 +111,25 @@ function UserDeductionsPage() {
     setError(null);
     console.log(`UserDeductionsPage: Fetching deductions for user ID: ${userId}`);
     try {
-      const response = await fetch(`/api/admin/users/${userId}/deductions`, {
+      const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/deductions`, {
         headers: { 'Authorization': `Bearer ${accessToken}` },
       });
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.message || `Gagal mengambil potongan pengguna. Status: ${response.status}`);
+        const errData = await response.json().catch(() => ({})) as ApiErrorResponse;
+        throw new Error(errData.message || errData.error || `Gagal mengambil potongan pengguna. Status: ${response.status}`);
       }
-      const data: UserDeduction[] = await response.json();
-      setUserDeductions(data);
-      console.log('UserDeductionsPage: User deductions fetched:', data);
+      const data: { data: UserDeduction[] } = await response.json(); // Asumsi API membungkus dalam 'data'
+      setUserDeductions(data.data || []);
+      console.log('UserDeductionsPage: User deductions fetched:', data.data);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan.';
       setError(errorMessage);
+      setUserDeductions([]);
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken, userId]);
+  }, [accessToken, userId, API_BASE_URL]);
 
-  // Ambil semua data yang diperlukan saat komponen dimuat atau dependensi berubah
   useEffect(() => {
     if (userId && accessToken) {
       fetchUserName();
@@ -137,7 +140,7 @@ function UserDeductionsPage() {
 
   const handleAdd = () => {
     if (availableDeductionTypes.length === 0) {
-        alert("Tidak ada tipe potongan yang tersedia untuk ditambahkan. Silakan tambahkan tipe potongan terlebih dahulu di menu 'Kelola Tipe Potongan'.");
+        alert("Tidak ada tipe potongan yang tersedia. Tambahkan dulu di 'Kelola Tipe Potongan'.");
         return;
     }
     setEditingData(null);
@@ -147,7 +150,7 @@ function UserDeductionsPage() {
 
   const handleEdit = (item: UserDeduction) => {
     const formData: UserDeductionFormData = {
-      id: item.id, // ID dari UserDeduction
+      id: item.id,
       deductionTypeId: item.deductionTypeId,
       assignedAmount: item.assignedAmount !== null ? String(item.assignedAmount) : null,
       assignedPercentage: item.assignedPercentage !== null ? String(item.assignedPercentage) : null,
@@ -158,20 +161,21 @@ function UserDeductionsPage() {
   };
 
   const handleDelete = async (userDeductionId: string, deductionName: string) => {
-    if (window.confirm(`Apakah Anda yakin ingin menghapus potongan "${deductionName}" untuk pengguna ini?`)) {
+    if (!API_BASE_URL) { setError('URL API tidak ditemukan.'); return; }
+    if (window.confirm(`Yakin ingin menghapus potongan "${deductionName}" untuk pengguna ini?`)) {
       setError(null);
       if (!accessToken || !userId) { setError('Token atau User ID tidak ditemukan.'); return; }
       try {
-        const response = await fetch(`/api/admin/users/${userId}/deductions/${userDeductionId}`, {
+        const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/deductions/${userDeductionId}`, {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${accessToken}` },
         });
         if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.message || `Gagal menghapus potongan. Status: ${response.status}`);
+          const errData = await response.json().catch(() => ({})) as ApiErrorResponse;
+          throw new Error(errData.message || errData.error || `Gagal menghapus potongan. Status: ${response.status}`);
         }
         alert(`Potongan "${deductionName}" berhasil dihapus.`);
-        fetchUserDeductions(); // Refresh data
+        fetchUserDeductions();
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan.';
         setError(`Gagal menghapus: ${errorMessage}`);
@@ -180,6 +184,11 @@ function UserDeductionsPage() {
   };
 
   const handleFormSubmit = async (formData: UserDeductionFormData) => {
+    if (!API_BASE_URL) { 
+        setError('URL API tidak ditemukan.'); 
+        setIsSubmitting(false); 
+        throw new Error('URL API tidak ditemukan.');
+    }
     setIsSubmitting(true);
     setError(null);
     if (!accessToken || !userId) {
@@ -190,8 +199,8 @@ function UserDeductionsPage() {
 
     const isEditMode = !!formData.id;
     const url = isEditMode 
-        ? `/api/admin/users/${userId}/deductions/${formData.id}` 
-        : `/api/admin/users/${userId}/deductions`;
+        ? `${API_BASE_URL}/admin/users/${userId}/deductions/${formData.id}` 
+        : `${API_BASE_URL}/admin/users/${userId}/deductions`;
     const method = isEditMode ? 'PUT' : 'POST';
 
     const selectedType = availableDeductionTypes.find(dt => dt.id === formData.deductionTypeId);
@@ -200,7 +209,6 @@ function UserDeductionsPage() {
     };
 
     if (selectedType) {
-        // Gunakan DeductionCalculationTypeValue untuk perbandingan
         if (selectedType.calculationType === DeductionCalculationTypeValue.FIXED_USER) {
             bodyToSubmit.assignedAmount = formData.assignedAmount;
             bodyToSubmit.assignedPercentage = null;
@@ -212,8 +220,7 @@ function UserDeductionsPage() {
             bodyToSubmit.assignedPercentage = null;
         }
     } else {
-        // Seharusnya tidak terjadi jika form validasi bekerja dengan baik
-        console.error("Tipe potongan yang dipilih tidak ditemukan di availableDeductionTypes.");
+        console.error("Tipe potongan yang dipilih tidak ditemukan.");
         setError("Tipe potongan yang dipilih tidak valid.");
         setIsSubmitting(false);
         throw new Error("Tipe potongan yang dipilih tidak valid.");
@@ -232,8 +239,8 @@ function UserDeductionsPage() {
       });
 
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.message || `Gagal submit. Status: ${response.status}`);
+        const errData = await response.json().catch(() => ({})) as ApiErrorResponse;
+        throw new Error(errData.message || errData.error || `Gagal submit. Status: ${response.status}`);
       }
       alert(`Potongan pengguna berhasil ${isEditMode ? 'diperbarui' : 'ditambahkan'}!`);
       setShowForm(false);
@@ -293,8 +300,8 @@ function UserDeductionsPage() {
             {userDeductions.length === 0 ? (
               <tr><td colSpan={5} style={styles.tableCellCenter}>Tidak ada potongan yang ditetapkan untuk pengguna ini.</td></tr>
             ) : (
-              userDeductions.map((ud) => (
-                <tr key={ud.id} style={styles.tableRow}>
+              userDeductions.map((ud, index) => (
+                <tr key={ud.id} style={{...styles.tableRow, backgroundColor: index % 2 === 0 ? '#f9f9f9' : 'white'}}>
                   <td style={styles.tableCell}>{ud.deductionType?.name || 'Tipe Dihapus'}</td>
                   <td style={styles.tableCell}>{ud.deductionType?.calculationType.replace(/_/g, ' ') || '-'}</td>
                   <td style={styles.tableCellRight}>{ud.assignedAmount ? parseFloat(ud.assignedAmount).toLocaleString('id-ID') : '-'}</td>
@@ -323,7 +330,6 @@ function UserDeductionsPage() {
   );
 }
 
-// Styling (bisa disamakan atau disesuaikan)
 const styles: { [key: string]: React.CSSProperties } = {
   container: { padding: '20px', fontFamily: 'sans-serif' },
   backLink: { marginBottom: '20px', display: 'inline-block', color: '#007bff', textDecoration: 'none' },

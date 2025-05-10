@@ -1,21 +1,25 @@
 // src/pages/UserManagementPage.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import UserForm from '../components/UserForm';
-import { Link } from 'react-router-dom'; // Pastikan Link sudah diimpor
+import UserForm from '../components/UserForm'; // Pastikan path ini benar
+import { Link } from 'react-router-dom'; // Untuk link ke halaman detail
 
-// Tipe data untuk User
+// **TAMBAHAN: Ambil API_BASE_URL dari environment variable Vite**
+// Ini akan digunakan untuk semua panggilan API ke backend
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
+// Tipe data untuk User yang diterima dari API
 interface UserData {
   id: string;
   name: string;
   email: string;
   role: string;
-  baseSalary: string | null;
+  baseSalary: string | null; // API mungkin mengirim string
   createdAt: string;
   updatedAt: string;
 }
 
-// Tipe data untuk form
+// Tipe data untuk data yang dikirim ke/dari UserForm
 interface UserFormData {
     id?: string;
     name: string;
@@ -25,7 +29,21 @@ interface UserFormData {
     baseSalary: string | null;
 }
 
-const AVAILABLE_ROLES = ['ADMIN', 'USER', 'YAYASAN'];
+// Tipe untuk respons error umum dari API
+interface ApiErrorResponse {
+  message?: string;
+  error?: string;
+  code?: string;
+}
+
+// Tipe untuk respons sukses dari API user (misal saat tambah/update)
+interface UserSuccessResponse {
+    message: string;
+    user?: UserData; // Objek user bisa opsional tergantung respons API
+    data?: UserData; // Atau API Anda mungkin membungkusnya dalam 'data'
+}
+
+const AVAILABLE_ROLES = ['ADMIN', 'USER', 'YAYASAN', 'REKTOR', 'PR1', 'PR2', 'EMPLOYEE'];
 
 function UserManagementPage() {
   const [users, setUsers] = useState<UserData[]>([]);
@@ -41,29 +59,46 @@ function UserManagementPage() {
     if (!accessToken) {
         setError('Token autentikasi tidak tersedia.');
         setIsLoading(false);
+        console.error('UserManagementPage: Token tidak ditemukan dari context.');
         return;
     }
+    if (!API_BASE_URL) { // Validasi API_BASE_URL
+        setError('Konfigurasi URL API tidak ditemukan. Cek VITE_API_BASE_URL.');
+        setIsLoading(false);
+        console.error('UserManagementPage: VITE_API_BASE_URL is not defined.');
+        return;
+    }
+
     setIsLoading(true);
     setError(null);
+    console.log('UserManagementPage: Fetching users...');
+
     try {
-      const response = await fetch('/api/admin/users', {
+      // **PERUBAHAN: Gunakan API_BASE_URL**
+      const response = await fetch(`${API_BASE_URL}/admin/users`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
         },
       });
+
       if (!response.ok) {
         let errorMsg = `Gagal mengambil data user. Status: ${response.status}`;
-        try { const errorData = await response.json(); errorMsg = errorData.message || errorData.error || errorMsg; }
+        try { 
+          const errorData = await response.json() as ApiErrorResponse; 
+          errorMsg = errorData.message || errorData.error || errorMsg; 
+        }
         catch (parseError) { console.warn("Could not parse error response body as JSON. Error:", parseError); }
         throw new Error(errorMsg);
       }
-      const data: UserData[] = await response.json();
-      setUsers(data);
+      const responseData: { data: UserData[] } = await response.json();
+      setUsers(responseData.data || []);
+      console.log('UserManagementPage: Users fetched successfully:', responseData.data);
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan tidak diketahui.';
+      const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan tidak diketahui saat mengambil data user.';
       setError(errorMessage);
+      setUsers([]);
     } finally {
       setIsLoading(false);
     }
@@ -93,25 +128,35 @@ function UserManagementPage() {
   };
 
   const handleDeleteUser = async (userId: string, userName: string) => {
+    if (!API_BASE_URL) {
+        setError('Konfigurasi URL API tidak ditemukan.');
+        console.error('UserManagementPage: VITE_API_BASE_URL is not defined for delete.');
+        return;
+    }
     if (window.confirm(`Apakah Anda yakin ingin menghapus pengguna "${userName}" (ID: ${userId})?`)) {
       setError(null);
       const token = accessToken;
       if (!token) { setError('Token tidak ditemukan.'); return; }
       try {
-        const response = await fetch(`/api/admin/users/${userId}`, {
+        // **PERUBAHAN: Gunakan API_BASE_URL**
+        const response = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${token}` },
         });
         if (!response.ok) {
           let errorMsg = `Gagal menghapus user. Status: ${response.status}`;
-          try { const errorData = await response.json(); errorMsg = errorData.message || errorData.error || errorMsg; }
+          try { 
+            const errorData = await response.json() as ApiErrorResponse; 
+            errorMsg = errorData.message || errorData.error || errorMsg; 
+          }
           catch (parseError) { console.warn("Could not parse delete error response body as JSON. Error:", parseError); }
           throw new Error(errorMsg);
         }
-        alert(`Pengguna "${userName}" berhasil dihapus.`);
+        const result: { message: string } = await response.json();
+        alert(result.message || `Pengguna "${userName}" berhasil dihapus.`);
         fetchUsers();
       } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan tidak diketahui.';
+        const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan tidak diketahui saat menghapus.';
         setError(`Gagal menghapus: ${errorMessage}`);
       }
     }
@@ -119,9 +164,16 @@ function UserManagementPage() {
 
   const handleResetPassword = (userId: string) => {
     alert(`Fungsi Reset password untuk pengguna ID: ${userId} belum diimplementasikan.`);
+    console.log(`Reset password untuk pengguna dengan ID: ${userId}`);
   };
 
   const handleFormSubmit = async (formData: UserFormData) => {
+    if (!API_BASE_URL) {
+        setError('Konfigurasi URL API tidak ditemukan.');
+        setIsSubmitting(false);
+        console.error('UserManagementPage: VITE_API_BASE_URL is not defined for form submit.');
+        throw new Error('Konfigurasi URL API tidak ditemukan.');
+    }
     setIsSubmitting(true);
     setError(null);
     const token = accessToken;
@@ -131,8 +183,10 @@ function UserManagementPage() {
         throw new Error('Token autentikasi tidak ditemukan.');
     }
     const isEditMode = !!formData.id;
-    const url = isEditMode ? `/api/admin/users/${formData.id}` : '/api/admin/users';
+    // **PERUBAHAN: Gunakan API_BASE_URL**
+    const url = isEditMode ? `${API_BASE_URL}/admin/users/${formData.id}` : `${API_BASE_URL}/admin/users`;
     const method = isEditMode ? 'PUT' : 'POST';
+    
     interface ApiUserPayload {
       name: string;
       email: string;
@@ -144,7 +198,7 @@ function UserManagementPage() {
       name: formData.name,
       email: formData.email,
       role: formData.role,
-      baseSalary: formData.baseSalary !== null ? Number(formData.baseSalary) : null,
+      baseSalary: formData.baseSalary !== null && formData.baseSalary.trim() !== '' ? Number(formData.baseSalary) : null,
     };
     if (!isEditMode) {
       if (formData.password) {
@@ -155,6 +209,7 @@ function UserManagementPage() {
         throw new Error('Password wajib diisi.');
       }
     }
+    console.log(`Submitting user data (${method}) to ${url}:`, apiRequestBody);
     try {
       const response = await fetch(url, {
         method: method,
@@ -166,15 +221,20 @@ function UserManagementPage() {
       });
       if (!response.ok) {
         let errorMsg = `Gagal ${isEditMode ? 'memperbarui' : 'menambah'} user. Status: ${response.status}`;
-        try { const errorData = await response.json(); errorMsg = errorData.message || errorData.error || errorMsg; }
+        try { 
+          const errorData = await response.json() as ApiErrorResponse; 
+          errorMsg = errorData.message || errorData.error || errorMsg; 
+        }
         catch (parseError) { console.warn("Could not parse form submit error response body as JSON. Error:", parseError); }
         throw new Error(errorMsg);
       }
-      alert(`Pengguna berhasil ${isEditMode ? 'diperbarui' : 'ditambahkan'}!`);
+      const result = await response.json() as UserSuccessResponse; 
+      console.log(`Form submit successful:`, result);
+      alert(result.message || `Pengguna berhasil ${isEditMode ? 'diperbarui' : 'ditambahkan'}!`);
       setShowForm(false);
       fetchUsers();
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan tidak diketahui.';
+      const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan tidak diketahui saat submit.';
       setError(`Gagal submit: ${errorMessage}`);
       throw err;
     } finally {
@@ -201,56 +261,54 @@ function UserManagementPage() {
       {isLoading ? (
         <div>Memuat daftar pengguna...</div>
       ) : (
-        <table style={styles.table}>
-          <thead style={styles.tableHead}>
-            <tr>
-              <th style={styles.tableHeader}>No</th>
-              <th style={styles.tableHeader}>Nama</th>
-              <th style={styles.tableHeader}>Email</th>
-              <th style={styles.tableHeader}>Role</th>
-              <th style={styles.tableHeader}>Gaji Pokok</th>
-              <th style={styles.tableHeader}>Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.length === 0 ? (
-              <tr><td colSpan={6} style={styles.tableCellCenter}>Tidak ada data pengguna.</td></tr>
-            ) : (
-              users.map((user, index) => (
-                <tr key={user.id} style={styles.tableRow}>
-                  <td style={styles.tableCellCenter}>{index + 1}</td>
-                  <td style={styles.tableCell}>{user.name}</td>
-                  <td style={styles.tableCell}>{user.email}</td>
-                  <td style={styles.tableCell}>{user.role}</td>
-                  <td style={styles.tableCellRight}>
-                    {user.baseSalary ? `Rp ${parseInt(user.baseSalary, 10).toLocaleString('id-ID')}` : '-'}
-                  </td>
-                  <td style={styles.tableCellCenter}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}> {/* // <--- Wrapper untuk tombol */}
-                        <div>
-                            <button onClick={() => handleEditUser(user)} style={{ ...styles.actionButton, ...styles.editButton, width: '100px', marginBottom: '3px' }} disabled={showForm}>Edit</button>
-                            <button onClick={() => handleDeleteUser(user.id, user.name)} style={{ ...styles.actionButton, ...styles.deleteButton, width: '100px', marginBottom: '3px' }} disabled={showForm}>Hapus</button>
-                        </div>
-                        <div>
-                            <button onClick={() => handleResetPassword(user.id)} style={{ ...styles.actionButton, ...styles.resetButton, width: '100px', marginBottom: '3px' }} disabled={showForm}>Reset Pass</button>
-                             {/* --- TOMBOL BARU UNTUK KELOLA TUNJANGAN --- */}
-                            <Link to={`/users/${user.id}/allowances`} style={{ ...styles.actionButton, ...styles.manageButton, width: '100px', marginBottom: '3px', boxSizing: 'border-box' }} className={showForm ? 'disabled-link' : ''}>
-                                Tunjangan
-                            </Link>
-                        </div>
-                        <div>
-                            {/* --- TOMBOL BARU UNTUK KELOLA POTONGAN --- */}
-                            <Link to={`/users/${user.id}/deductions`} style={{ ...styles.actionButton, ...styles.manageDeductionButton, width: '100px', boxSizing: 'border-box' }} className={showForm ? 'disabled-link' : ''}>
-                                Potongan
-                            </Link>
-                        </div>
-                    </div>
-                  </td>
+        <div style={{overflowX: 'auto'}}>
+            <table style={styles.table}>
+            <thead style={styles.tableHead}>
+                <tr>
+                <th style={styles.tableHeader}>No</th>
+                <th style={styles.tableHeader}>Nama</th>
+                <th style={styles.tableHeader}>Email</th>
+                <th style={styles.tableHeader}>Role</th>
+                <th style={styles.tableHeader}>Gaji Pokok</th>
+                <th style={styles.tableHeader}>Aksi</th>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+                {users.length === 0 ? (
+                <tr><td colSpan={6} style={styles.tableCellCenter}>Tidak ada data pengguna.</td></tr>
+                ) : (
+                users.map((user, index) => (
+                    <tr key={user.id} style={{...styles.tableRow, backgroundColor: index % 2 === 0 ? '#f9f9f9' : 'white'}}>
+                    <td style={styles.tableCellCenter}>{index + 1}</td>
+                    <td style={styles.tableCell}>{user.name}</td>
+                    <td style={styles.tableCell}>{user.email}</td>
+                    <td style={styles.tableCell}>{user.role}</td>
+                    <td style={styles.tableCellRight}>
+                        {user.baseSalary ? `Rp ${parseInt(user.baseSalary, 10).toLocaleString('id-ID')}` : '-'}
+                    </td>
+                    <td style={styles.tableCellCenter}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
+                            <div style={{display: 'flex', gap: '4px'}}>
+                                <button onClick={() => handleEditUser(user)} style={{ ...styles.actionButton, ...styles.editButton }} disabled={showForm}>Edit</button>
+                                <button onClick={() => handleDeleteUser(user.id, user.name)} style={{ ...styles.actionButton, ...styles.deleteButton }} disabled={showForm}>Hapus</button>
+                                <button onClick={() => handleResetPassword(user.id)} style={{ ...styles.actionButton, ...styles.resetButton }} disabled={showForm}>Reset Pass</button>
+                            </div>
+                            <div style={{display: 'flex', gap: '4px', marginTop: '4px'}}>
+                                <Link to={`/users/${user.id}/allowances`} style={{ ...styles.actionButton, ...styles.manageButton }} className={showForm ? 'disabled-link' : ''}>
+                                    Tunjangan
+                                </Link>
+                                <Link to={`/users/${user.id}/deductions`} style={{ ...styles.actionButton, ...styles.manageDeductionButton }} className={showForm ? 'disabled-link' : ''}>
+                                    Potongan
+                                </Link>
+                            </div>
+                        </div>
+                    </td>
+                    </tr>
+                ))
+                )}
+            </tbody>
+            </table>
+        </div>
       )}
       {showForm && (
         <UserForm
@@ -273,16 +331,16 @@ const styles: { [key: string]: React.CSSProperties } = {
   table: { width: '100%', borderCollapse: 'collapse', fontSize: '14px', border: '1px solid #dee2e6' },
   tableHead: { backgroundColor: '#f8f9fa' },
   tableHeader: { padding: '10px', border: '1px solid #dee2e6', textAlign: 'left', fontWeight: 'bold' },
-  tableRow: { /* Styling untuk zebra-striping bisa ditambahkan dengan CSS */ },
+  tableRow: { /* Styling dasar untuk baris */ },
   tableCell: { padding: '10px', border: '1px solid #dee2e6', verticalAlign: 'middle' },
   tableCellCenter: { padding: '10px', border: '1px solid #dee2e6', textAlign: 'center', verticalAlign: 'middle' },
   tableCellRight: { padding: '10px', border: '1px solid #dee2e6', textAlign: 'right', verticalAlign: 'middle' },
-  actionButton: { textDecoration: 'none', marginRight: '5px', padding: '4px 8px', fontSize: '12px', border: 'none', borderRadius: '3px', cursor: 'pointer', color: 'white', display: 'inline-block', lineHeight: 'normal', verticalAlign: 'middle' },
+  actionButton: { textDecoration: 'none', minWidth: '80px', marginRight: '5px', padding: '5px 10px', fontSize: '12px', border: 'none', borderRadius: '3px', cursor: 'pointer', color: 'white', display: 'inline-block', lineHeight: 'normal', verticalAlign: 'middle', textAlign: 'center' },
   editButton: { backgroundColor: '#007bff' },
   deleteButton: { backgroundColor: '#dc3545' },
   resetButton: { backgroundColor: '#ffc107', color: '#212529' },
-  manageButton: { backgroundColor: '#17a2b8' }, // Warna untuk kelola tunjangan
-  manageDeductionButton: { backgroundColor: '#6f42c1' }, // Warna baru untuk kelola potongan
+  manageButton: { backgroundColor: '#17a2b8' }, 
+  manageDeductionButton: { backgroundColor: '#6f42c1' },
   errorText: { color: '#721c24', border: '1px solid #f5c6cb', padding: '10px', borderRadius: '4px', backgroundColor: '#f8d7da', marginBottom: '15px' },
 };
 

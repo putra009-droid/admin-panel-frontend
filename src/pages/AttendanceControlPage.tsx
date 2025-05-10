@@ -1,10 +1,56 @@
 // src/pages/AttendanceControlPage.tsx
-// 'import React from 'react';' Dihapus jika tidak ada penggunaan React.* eksplisit
-import { useState, useEffect, useCallback, type FormEvent } from 'react'; // type FormEvent diimpor di sini
+import React, { useState, useEffect, useCallback, type FormEvent } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 const SERVER_BASE_URL = import.meta.env.VITE_SERVER_BASE_URL || '';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
+// Tipe untuk respons error umum dari API
+interface ApiErrorResponse {
+  message?: string;
+  error?: string;
+}
+
+// Tipe data untuk User yang diterima dari API (untuk filter)
+interface UserFromApi {
+  id: string;
+  name: string;
+}
+
+// Tipe untuk struktur respons API daftar pengguna
+interface UsersApiResponse {
+  data: UserFromApi[];
+}
+
+// Tipe data untuk Absensi mentah dari API (lokasi mungkin string)
+interface RawAttendanceRecordFromApi {
+  id: string;
+  userId: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  clockIn: string | null;
+  clockOut: string | null;
+  status: string;
+  notes: string | null;
+  latitudeIn: string | number | null;
+  longitudeIn: string | number | null;
+  latitudeOut: string | number | null;
+  longitudeOut: string | number | null;
+  createdAt: string;
+  selfieInUrl?: string | null;
+  selfieOutUrl?: string | null;
+  deviceModel?: string | null;
+  deviceOS?: string | null;
+  isMockLocationIn?: boolean | null;
+  gpsAccuracyIn?: string | number | null;
+  isMockLocationOut?: boolean | null;
+  gpsAccuracyOut?: string | number | null;
+}
+
+// Tipe data untuk Absensi yang sudah diformat di frontend
 interface AttendanceRecord {
   id: string;
   userId: string;
@@ -27,9 +73,23 @@ interface AttendanceRecord {
   deviceModel?: string | null;
   deviceOS?: string | null;
   isMockLocationIn?: boolean | null;
-  gpsAccuracyIn?: number | null; // Field untuk akurasi GPS Clock In
+  gpsAccuracyIn?: number | null;
   isMockLocationOut?: boolean | null;
-  gpsAccuracyOut?: number | null; // Field untuk akurasi GPS Clock Out
+  gpsAccuracyOut?: number | null;
+}
+
+// Tipe untuk struktur respons API daftar absensi
+interface AttendancesApiResponse {
+  data: RawAttendanceRecordFromApi[];
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+}
+
+// Tipe untuk respons sukses dari API ubah status
+interface UpdateStatusApiResponse {
+    message: string;
+    record: Partial<AttendanceRecord>;
 }
 
 interface UserOption {
@@ -64,22 +124,25 @@ function AttendanceControlPage() {
   const [newNotes, setNewNotes] = useState<string>('');
 
   const fetchUsersForFilter = useCallback(async () => {
-    if (!accessToken) return;
+    if (!accessToken || !API_BASE_URL) return;
     try {
-      const response = await fetch('/api/admin/users?limit=1000&sort=name&order=asc', {
+      const response = await fetch(`${API_BASE_URL}/admin/users?limit=1000&sort=name&order=asc`, {
         headers: { 'Authorization': `Bearer ${accessToken}` },
       });
-      if (!response.ok) throw new Error('Gagal mengambil daftar pengguna');
-      const data = await response.json();
-      setUsers(data.data.map((u: {id: string, name: string}) => ({ id: u.id, name: u.name })));
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({})) as ApiErrorResponse;
+        throw new Error(errorData.message || errorData.error || 'Gagal mengambil daftar pengguna');
+      }
+      const data = await response.json() as UsersApiResponse;
+      setUsers((data.data || []).map((u: UserFromApi) => ({ id: u.id, name: u.name })));
     } catch (err) {
       console.error("Gagal mengambil daftar pengguna untuk filter:", err);
     }
   }, [accessToken]);
 
   const fetchAttendances = useCallback(async (pageToFetch = 1) => {
-    if (!accessToken) {
-      setError('Token autentikasi tidak tersedia.');
+    if (!accessToken || !API_BASE_URL) {
+      setError('Token autentikasi atau URL API tidak tersedia.');
       setIsLoading(false);
       return;
     }
@@ -96,22 +159,23 @@ function AttendanceControlPage() {
     if (selectedStatusFilter) queryParams.append('status', selectedStatusFilter);
 
     try {
-      const response = await fetch(`/api/admin/attendances?${queryParams.toString()}`, {
+      const response = await fetch(`${API_BASE_URL}/admin/attendances?${queryParams.toString()}`, {
         headers: { 'Authorization': `Bearer ${accessToken}` },
       });
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.message || `Gagal mengambil data absensi. Status: ${response.status}`);
+        const errData = await response.json().catch(() => ({})) as ApiErrorResponse;
+        throw new Error(errData.message || errData.error || `Gagal mengambil data absensi. Status: ${response.status}`);
       }
-      const data = await response.json();
-      const formattedAttendances = (data.data || []).map((att: any) => ({
+      const data = await response.json() as AttendancesApiResponse;
+      
+      const formattedAttendances: AttendanceRecord[] = (data.data || []).map((att: RawAttendanceRecordFromApi) => ({
         ...att,
-        latitudeIn: att.latitudeIn ? parseFloat(String(att.latitudeIn)) : null,
-        longitudeIn: att.longitudeIn ? parseFloat(String(att.longitudeIn)) : null,
-        latitudeOut: att.latitudeOut ? parseFloat(String(att.latitudeOut)) : null,
-        longitudeOut: att.longitudeOut ? parseFloat(String(att.longitudeOut)) : null,
-        gpsAccuracyIn: att.gpsAccuracyIn ? parseFloat(String(att.gpsAccuracyIn)) : null,
-        gpsAccuracyOut: att.gpsAccuracyOut ? parseFloat(String(att.gpsAccuracyOut)) : null,
+        latitudeIn: att.latitudeIn !== null && !isNaN(parseFloat(String(att.latitudeIn))) ? parseFloat(String(att.latitudeIn)) : null,
+        longitudeIn: att.longitudeIn !== null && !isNaN(parseFloat(String(att.longitudeIn))) ? parseFloat(String(att.longitudeIn)) : null,
+        latitudeOut: att.latitudeOut !== null && !isNaN(parseFloat(String(att.latitudeOut))) ? parseFloat(String(att.latitudeOut)) : null,
+        longitudeOut: att.longitudeOut !== null && !isNaN(parseFloat(String(att.longitudeOut))) ? parseFloat(String(att.longitudeOut)) : null,
+        gpsAccuracyIn: att.gpsAccuracyIn !== null && !isNaN(parseFloat(String(att.gpsAccuracyIn))) ? parseFloat(String(att.gpsAccuracyIn)) : null,
+        gpsAccuracyOut: att.gpsAccuracyOut !== null && !isNaN(parseFloat(String(att.gpsAccuracyOut))) ? parseFloat(String(att.gpsAccuracyOut)) : null,
         isMockLocationIn: typeof att.isMockLocationIn === 'boolean' ? att.isMockLocationIn : null,
         isMockLocationOut: typeof att.isMockLocationOut === 'boolean' ? att.isMockLocationOut : null,
       }));
@@ -164,6 +228,11 @@ function AttendanceControlPage() {
   };
 
   const handleModalStatusChange = async () => {
+    if (!API_BASE_URL) {
+        setError('Konfigurasi URL API tidak ditemukan.');
+        setIsSubmitting(false);
+        throw new Error('Konfigurasi URL API tidak ditemukan.');
+    }
     if (!editingRecord || !newStatus) {
       alert("Pilih status baru.");
       return;
@@ -185,7 +254,7 @@ function AttendanceControlPage() {
     }
     
     try {
-        const response = await fetch('/api/admin/attendance/status', {
+        const response = await fetch(`${API_BASE_URL}/admin/attendance/status`, {
             method: 'POST', 
             headers: {
                 'Content-Type': 'application/json',
@@ -200,10 +269,11 @@ function AttendanceControlPage() {
         });
 
         if (!response.ok) {
-            const errData = await response.json().catch(() => ({}));
-            throw new Error(errData.message || `Gagal mengubah status. Status: ${response.status}`);
+            const errData = await response.json().catch(() => ({})) as ApiErrorResponse;
+            throw new Error(errData.message || errData.error || `Gagal mengubah status. Status: ${response.status}`);
         }
-        alert('Status absensi berhasil diubah.');
+        const result = await response.json() as UpdateStatusApiResponse;
+        alert(result.message || 'Status absensi berhasil diubah.');
         setEditingRecord(null);
         fetchAttendances(currentPage);
     } catch (err: unknown) {
@@ -267,7 +337,7 @@ function AttendanceControlPage() {
       {!isLoading && attendances.length === 0 && <p>Tidak ada data absensi yang cocok dengan filter.</p>}
       {!isLoading && attendances.length > 0 && (
         <>
-          <p>Total Data: {totalItems}</p>
+          <p style={{margin: '10px 0'}}>Total Data: {totalItems}</p>
           <div style={{overflowX: 'auto'}}>
             <table style={styles.table}>
               <thead style={styles.tableHead}>
@@ -315,7 +385,6 @@ function AttendanceControlPage() {
                       {att.isMockLocationIn === true ? <span style={{color: 'red', fontWeight: 'bold'}}>Ya</span> : (att.isMockLocationIn === false ? 'Tidak' : '-')}
                     </td>
                     <td style={styles.tableCellRight}>
-                      {/* **PERBAIKAN: Gunakan att.gpsAccuracyIn dan cek null/undefined** */}
                       {att.gpsAccuracyIn !== null && att.gpsAccuracyIn !== undefined ? `${att.gpsAccuracyIn.toFixed(1)} m` : '-'}
                     </td>
                     <td style={styles.tableCell}>{formatDateTime(att.clockOut)}</td>
@@ -330,20 +399,16 @@ function AttendanceControlPage() {
                        {att.selfieOutUrl ? <a href={`${SERVER_BASE_URL}${att.selfieOutUrl}`} target="_blank" rel="noopener noreferrer">Lihat Foto</a> : '-'}
                     </td>
                     <td style={styles.tableCell}>
-                      {/* Asumsi device info sama untuk in & out, atau Anda perlu field terpisah di DB */}
-                      {/* Jika berbeda, gunakan field spesifik seperti att.deviceModelOut */}
                       {att.deviceModel || att.deviceOS ? `${att.deviceModel || ''} (${att.deviceOS || ''})` : '-'}
                     </td>
                      <td style={styles.tableCellCenter}>
                       {att.isMockLocationOut === true ? <span style={{color: 'red', fontWeight: 'bold'}}>Ya</span> : (att.isMockLocationOut === false ? 'Tidak' : '-')}
                     </td>
                     <td style={styles.tableCellRight}>
-                      {/* **PERBAIKAN: Gunakan att.gpsAccuracyOut dan cek null/undefined** */}
                       {att.gpsAccuracyOut !== null && att.gpsAccuracyOut !== undefined ? `${att.gpsAccuracyOut.toFixed(1)} m` : '-'}
                     </td>
                     <td style={styles.tableCell}>{att.status.replace(/_/g, ' ')}</td>
-                    <td style={styles.tableCell}>{att.notes || '-'}
-                    </td>
+                    <td style={styles.tableCell}>{att.notes || '-'}</td>
                     <td style={styles.tableCellCenter}>
                       <button 
                           onClick={() => openStatusEditModal(att)}

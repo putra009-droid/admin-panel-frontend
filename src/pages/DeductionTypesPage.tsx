@@ -2,27 +2,22 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import DeductionTypeForm from '../components/DeductionTypeForm';
-// Impor TIPE DeductionCalculationType secara eksplisit
-import type { DeductionCalculationType } from '../types/deductionTypes';
-// Kita tidak perlu mengimpor DeductionCalculationTypeValue atau AllDeductionCalculationTypes di sini
-// karena halaman ini hanya menggunakan DeductionCalculationType sebagai TIPE dalam interface
-// dan menerima string dari API yang sudah sesuai dengan tipe string literal tersebut.
+import type { DeductionCalculationType } from '../types/deductionTypes'; // Impor tipe
 
 // Tipe data untuk Tipe Potongan dari API
 interface DeductionType {
   id: string;
   name: string;
   description: string | null;
-  calculationType: DeductionCalculationType; // Menggunakan TIPE yang diimpor
-  ruleAmount: string | null; // API mengembalikan ini sebagai string atau null
-  rulePercentage: string | null; // API mengembalikan ini sebagai string atau null
+  calculationType: DeductionCalculationType;
+  ruleAmount: string | null;
+  rulePercentage: string | null;
   isMandatory: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
 
-// Tipe data untuk data yang dikirim ke form (cocokkan dengan DeductionTypeForm)
-// Ini juga menggunakan DeductionCalculationType sebagai TIPE
+// Tipe data untuk form
 interface DeductionTypeFormData {
     id?: string;
     name: string;
@@ -43,18 +38,23 @@ function DeductionTypesPage() {
   const [showForm, setShowForm] = useState<boolean>(false);
   const [editingData, setEditingData] = useState<DeductionTypeFormData | null>(null);
 
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
   const fetchDeductionTypes = useCallback(async () => {
     if (!accessToken) {
-      setError('Token autentikasi tidak tersedia. Silakan login ulang.');
+      setError('Token autentikasi tidak tersedia.');
       setIsLoading(false);
-      console.error('DeductionTypesPage: Token tidak ditemukan dari context.');
       return;
+    }
+    if (!API_BASE_URL) {
+        setError('Konfigurasi URL API tidak ditemukan.');
+        setIsLoading(false);
+        return;
     }
     setIsLoading(true);
     setError(null);
-    console.log('DeductionTypesPage: Fetching deduction types...');
     try {
-      const response = await fetch('/api/admin/deduction-types', {
+      const response = await fetch(`${API_BASE_URL}/admin/deduction-types`, {
         headers: { 'Authorization': `Bearer ${accessToken}` },
       });
       if (!response.ok) {
@@ -63,14 +63,13 @@ function DeductionTypesPage() {
       }
       const data: DeductionType[] = await response.json();
       setDeductionTypes(data);
-      console.log('DeductionTypesPage: Deduction types fetched successfully:', data);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan saat mengambil data.';
       setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken]);
+  }, [accessToken, API_BASE_URL]);
 
   useEffect(() => {
     fetchDeductionTypes();
@@ -87,7 +86,7 @@ function DeductionTypesPage() {
         id: item.id,
         name: item.name,
         description: item.description,
-        calculationType: item.calculationType, // item.calculationType sudah bertipe DeductionCalculationType (string literal)
+        calculationType: item.calculationType,
         ruleAmount: item.ruleAmount !== null ? String(item.ruleAmount) : null,
         rulePercentage: item.rulePercentage !== null ? String(item.rulePercentage) : null,
         isMandatory: item.isMandatory,
@@ -98,11 +97,15 @@ function DeductionTypesPage() {
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (window.confirm(`Apakah Anda yakin ingin menghapus tipe potongan "${name}" (ID: ${id})?`)) {
+    if (!API_BASE_URL) {
+        setError('Konfigurasi URL API tidak ditemukan.');
+        return;
+    }
+    if (window.confirm(`Yakin ingin menghapus tipe potongan "${name}" (ID: ${id})?`)) {
       setError(null);
       if (!accessToken) { setError('Token tidak ditemukan.'); return; }
       try {
-        const response = await fetch(`/api/admin/deduction-types/${id}`, {
+        const response = await fetch(`${API_BASE_URL}/admin/deduction-types/${id}`, {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${accessToken}` },
         });
@@ -120,6 +123,11 @@ function DeductionTypesPage() {
   };
 
   const handleFormSubmit = async (formData: DeductionTypeFormData) => {
+    if (!API_BASE_URL) {
+        setError('Konfigurasi URL API tidak ditemukan.');
+        setIsSubmitting(false);
+        throw new Error('Konfigurasi URL API tidak ditemukan.');
+    }
     setIsSubmitting(true);
     setError(null);
     if (!accessToken) {
@@ -129,20 +137,17 @@ function DeductionTypesPage() {
     }
 
     const isEditMode = !!formData.id;
-    const url = isEditMode ? `/api/admin/deduction-types/${formData.id}` : '/api/admin/deduction-types';
+    const url = isEditMode ? `${API_BASE_URL}/admin/deduction-types/${formData.id}` : `${API_BASE_URL}/admin/deduction-types`;
     const method = isEditMode ? 'PUT' : 'POST';
 
-    // Data yang dikirim ke backend
     const bodyToSubmit = {
         name: formData.name,
         description: formData.description?.trim() === '' ? null : formData.description,
-        calculationType: formData.calculationType, // Ini sudah string literal yang valid
-        ruleAmount: formData.ruleAmount, // String atau null
-        rulePercentage: formData.rulePercentage, // String atau null
+        calculationType: formData.calculationType,
+        ruleAmount: formData.ruleAmount,
+        rulePercentage: formData.rulePercentage,
         isMandatory: formData.isMandatory,
     };
-
-    console.log(`Submitting deduction type data (${method}) to ${url}:`, bodyToSubmit);
 
     try {
       const response = await fetch(url, {
@@ -210,8 +215,8 @@ function DeductionTypesPage() {
             {deductionTypes.length === 0 ? (
               <tr><td colSpan={6} style={styles.tableCellCenter}>Tidak ada data tipe potongan.</td></tr>
             ) : (
-              deductionTypes.map((item) => (
-                <tr key={item.id} style={styles.tableRow}>
+              deductionTypes.map((item, index) => (
+                <tr key={item.id} style={{...styles.tableRow, backgroundColor: index % 2 === 0 ? '#f9f9f9' : 'white'}}>
                   <td style={styles.tableCell}>{item.name}</td>
                   <td style={styles.tableCell}>{item.calculationType.replace(/_/g, ' ')}</td>
                   <td style={styles.tableCellRight}>{item.ruleAmount !== null ? parseFloat(item.ruleAmount).toLocaleString('id-ID') : '-'}</td>
@@ -240,6 +245,7 @@ function DeductionTypesPage() {
   );
 }
 
+// Styling
 const styles: { [key: string]: React.CSSProperties } = {
   container: { padding: '20px', fontFamily: 'sans-serif' },
   title: { marginBottom: '20px', color: '#333' },
@@ -248,7 +254,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   table: { width: '100%', borderCollapse: 'collapse', fontSize: '14px', border: '1px solid #dee2e6' },
   tableHead: { backgroundColor: '#f8f9fa' },
   tableHeader: { padding: '10px', border: '1px solid #dee2e6', textAlign: 'left', fontWeight: 'bold' },
-  tableRow: { /* Styling untuk zebra-striping bisa ditambahkan dengan CSS */ },
+  tableRow: { /* Styling dasar untuk baris */ },
   tableCell: { padding: '10px', border: '1px solid #dee2e6', verticalAlign: 'middle' },
   tableCellCenter: { padding: '10px', border: '1px solid #dee2e6', textAlign: 'center', verticalAlign: 'middle' },
   tableCellRight: { padding: '10px', border: '1px solid #dee2e6', textAlign: 'right', verticalAlign: 'middle' },
