@@ -1,10 +1,10 @@
 // src/pages/AttendanceControlPage.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+// 'import React from 'react';' Dihapus jika tidak ada penggunaan React.* eksplisit
+import { useState, useEffect, useCallback, type FormEvent } from 'react'; // type FormEvent diimpor di sini
 import { useAuth } from '../context/AuthContext';
 
 const SERVER_BASE_URL = import.meta.env.VITE_SERVER_BASE_URL || '';
 
-// Tipe data untuk Absensi yang diterima dari API
 interface AttendanceRecord {
   id: string;
   userId: string;
@@ -24,14 +24,14 @@ interface AttendanceRecord {
   createdAt: string;
   selfieInUrl?: string | null;
   selfieOutUrl?: string | null;
-  // Field baru untuk informasi perangkat dan Fake GPS
   deviceModel?: string | null;
   deviceOS?: string | null;
-  isMockLocation?: boolean | null;
-  gpsAccuracy?: number | null; // Akurasi dalam meter
+  isMockLocationIn?: boolean | null;
+  gpsAccuracyIn?: number | null; // Field untuk akurasi GPS Clock In
+  isMockLocationOut?: boolean | null;
+  gpsAccuracyOut?: number | null; // Field untuk akurasi GPS Clock Out
 }
 
-// Tipe data untuk User (untuk filter dropdown)
 interface UserOption {
   id: string;
   name: string;
@@ -104,15 +104,16 @@ function AttendanceControlPage() {
         throw new Error(errData.message || `Gagal mengambil data absensi. Status: ${response.status}`);
       }
       const data = await response.json();
-      // Pastikan data yang diterima dari API di-parse dengan benar untuk lokasi
-      const formattedAttendances = (data.data || []).map((att: any) => ({ // Beri tipe 'any' sementara untuk parsing
+      const formattedAttendances = (data.data || []).map((att: any) => ({
         ...att,
         latitudeIn: att.latitudeIn ? parseFloat(String(att.latitudeIn)) : null,
         longitudeIn: att.longitudeIn ? parseFloat(String(att.longitudeIn)) : null,
         latitudeOut: att.latitudeOut ? parseFloat(String(att.latitudeOut)) : null,
         longitudeOut: att.longitudeOut ? parseFloat(String(att.longitudeOut)) : null,
-        gpsAccuracy: att.gpsAccuracy ? parseFloat(String(att.gpsAccuracy)) : null,
-        isMockLocation: typeof att.isMockLocation === 'boolean' ? att.isMockLocation : null,
+        gpsAccuracyIn: att.gpsAccuracyIn ? parseFloat(String(att.gpsAccuracyIn)) : null,
+        gpsAccuracyOut: att.gpsAccuracyOut ? parseFloat(String(att.gpsAccuracyOut)) : null,
+        isMockLocationIn: typeof att.isMockLocationIn === 'boolean' ? att.isMockLocationIn : null,
+        isMockLocationOut: typeof att.isMockLocationOut === 'boolean' ? att.isMockLocationOut : null,
       }));
       setAttendances(formattedAttendances);
       setCurrentPage(data.currentPage || 1);
@@ -135,7 +136,7 @@ function AttendanceControlPage() {
     fetchAttendances(currentPage);
   }, [fetchAttendances, currentPage]);
 
-  const handleFilterSubmit = (e: React.FormEvent) => {
+  const handleFilterSubmit = (e: FormEvent) => {
     e.preventDefault();
     setCurrentPage(1); 
     if (currentPage === 1) {
@@ -150,11 +151,13 @@ function AttendanceControlPage() {
   };
   
   const openStatusEditModal = (record: AttendanceRecord) => {
-    if (!record.clockIn) {
-        alert("Data absensi tidak lengkap (tidak ada waktu Clock In).");
+    if (!record.clockIn && !ADMIN_SETTABLE_STATUSES.includes(record.status) ) { 
+        alert("Data absensi tidak lengkap (tidak ada waktu Clock In untuk status yang memerlukan).");
         return;
     }
-    const recordDate = new Date(record.clockIn).toISOString().split('T')[0];
+    const recordDateSource = record.clockIn || record.createdAt;
+    const recordDate = new Date(recordDateSource).toISOString().split('T')[0];
+
     setEditingRecord({id: record.id, date: recordDate, userId: record.userId, currentStatus: record.status});
     setNewStatus(record.status);
     setNewNotes(record.notes || '');
@@ -165,6 +168,11 @@ function AttendanceControlPage() {
       alert("Pilih status baru.");
       return;
     }
+    if (!ADMIN_SETTABLE_STATUSES.includes(newStatus)) {
+        alert(`Status "${newStatus.replace(/_/g, ' ')}" tidak diizinkan untuk diatur oleh admin.`);
+        return;
+    }
+
     const { id: attendanceId, date: recordDate, userId: recordUserId } = editingRecord;
     
     setActionLoading(prev => ({...prev, [attendanceId]: true}));
@@ -260,88 +268,97 @@ function AttendanceControlPage() {
       {!isLoading && attendances.length > 0 && (
         <>
           <p>Total Data: {totalItems}</p>
-          <table style={styles.table}>
-            <thead style={styles.tableHead}>
-              <tr>
-                <th style={styles.tableHeader}>Karyawan</th>
-                <th style={styles.tableHeader}>Clock In</th>
-                <th style={styles.tableHeader}>Lokasi In</th>
-                <th style={styles.tableHeader}>Selfie In</th>
-                <th style={styles.tableHeader}>Device In</th> {/* Kolom Baru */}
-                <th style={styles.tableHeader}>Clock Out</th>
-                <th style={styles.tableHeader}>Lokasi Out</th>
-                <th style={styles.tableHeader}>Selfie Out</th>
-                <th style={styles.tableHeader}>Device Out</th> {/* Kolom Baru */}
-                <th style={styles.tableHeader}>Status</th>
-                <th style={styles.tableHeader}>Mock GPS?</th> {/* Kolom Baru */}
-                <th style={styles.tableHeader}>Akurasi GPS (In)</th> {/* Kolom Baru */}
-                <th style={styles.tableHeader}>Catatan</th>
-                <th style={styles.tableHeader}>Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {attendances.map((att, index) => (
-                <tr key={att.id} style={{ 
-                    ...styles.tableRow, 
-                    backgroundColor: index % 2 === 0 ? '#f9f9f9' : 'white'
-                }}>
-                  <td style={styles.tableCell}>{att.user?.name || att.userId}</td>
-                  <td style={styles.tableCell}>{formatDateTime(att.clockIn)}</td>
-                  <td style={styles.tableCell}>
-                    {att.latitudeIn && att.longitudeIn ? (
-                      <a href={`https://www.google.com/maps?q=${att.latitudeIn},${att.longitudeIn}`} target="_blank" rel="noopener noreferrer">
-                        Lihat Peta
-                      </a>
-                    ) : '-'}
-                  </td>
-                  <td style={styles.tableCell}>
-                    {att.selfieInUrl ? <a href={`${SERVER_BASE_URL}${att.selfieInUrl}`} target="_blank" rel="noopener noreferrer">Lihat Foto</a> : '-'}
-                  </td>
-                  {/* Tampilkan Info Perangkat Clock In */}
-                  <td style={styles.tableCell}>
-                    {att.deviceModel || att.deviceOS ? `${att.deviceModel || ''} (${att.deviceOS || ''})` : '-'}
-                  </td>
-                  <td style={styles.tableCell}>{formatDateTime(att.clockOut)}</td>
-                  <td style={styles.tableCell}>
-                    {att.latitudeOut && att.longitudeOut ? (
-                      <a href={`https://www.google.com/maps?q=${att.latitudeOut},${att.longitudeOut}`} target="_blank" rel="noopener noreferrer">
-                        Lihat Peta
-                      </a>
-                    ) : '-'}
-                  </td>
-                  <td style={styles.tableCell}>
-                     {att.selfieOutUrl ? <a href={`${SERVER_BASE_URL}${att.selfieOutUrl}`} target="_blank" rel="noopener noreferrer">Lihat Foto</a> : '-'}
-                  </td>
-                   {/* Tampilkan Info Perangkat Clock Out (Jika Anda menyimpannya terpisah) */}
-                  <td style={styles.tableCell}>
-                    {/* Asumsi device info sama untuk in & out, atau Anda perlu field terpisah di DB */}
-                    {att.deviceModel || att.deviceOS ? `${att.deviceModel || ''} (${att.deviceOS || ''})` : '-'}
-                  </td>
-                  <td style={styles.tableCell}>{att.status.replace(/_/g, ' ')}</td>
-                  {/* Tampilkan Indikasi Mock GPS */}
-                  <td style={styles.tableCellCenter}>
-                    {att.isMockLocation === true ? <span style={{color: 'red', fontWeight: 'bold'}}>Ya</span> : (att.isMockLocation === false ? 'Tidak' : '-')}
-                  </td>
-                  {/* Tampilkan Akurasi GPS */}
-                  <td style={styles.tableCellRight}>
-                    {att.gpsAccuracy !== null ? `${att.gpsAccuracy.toFixed(1)} m` : '-'}
-                  </td>
-                  <td style={styles.tableCell}>{att.notes || '-'}</td>
-                  <td style={styles.tableCellCenter}>
-                    <button 
-                        onClick={() => openStatusEditModal(att)}
-                        style={{ ...styles.actionButton, ...styles.editButton }}
-                        disabled={actionLoading[att.id]}
-                    >
-                        Ubah Status
-                    </button>
-                  </td>
+          <div style={{overflowX: 'auto'}}>
+            <table style={styles.table}>
+              <thead style={styles.tableHead}>
+                <tr>
+                  <th style={styles.tableHeader}>Karyawan</th>
+                  <th style={styles.tableHeader}>Clock In</th>
+                  <th style={styles.tableHeader}>Lokasi In</th>
+                  <th style={styles.tableHeader}>Selfie In</th>
+                  <th style={styles.tableHeader}>Device (In)</th>
+                  <th style={styles.tableHeader}>Mock (In)</th>
+                  <th style={styles.tableHeader}>Akurasi (In)</th>
+                  <th style={styles.tableHeader}>Clock Out</th>
+                  <th style={styles.tableHeader}>Lokasi Out</th>
+                  <th style={styles.tableHeader}>Selfie Out</th>
+                  <th style={styles.tableHeader}>Device (Out)</th>
+                  <th style={styles.tableHeader}>Mock (Out)</th>
+                  <th style={styles.tableHeader}>Akurasi (Out)</th>
+                  <th style={styles.tableHeader}>Status</th>
+                  <th style={styles.tableHeader}>Catatan</th>
+                  <th style={styles.tableHeader}>Aksi</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {attendances.map((att, index) => (
+                  <tr key={att.id} style={{ 
+                      ...styles.tableRow, 
+                      backgroundColor: index % 2 === 0 ? '#f9f9f9' : 'white'
+                  }}>
+                    <td style={styles.tableCell}>{att.user?.name || att.userId}</td>
+                    <td style={styles.tableCell}>{formatDateTime(att.clockIn)}</td>
+                    <td style={styles.tableCell}>
+                      {att.latitudeIn && att.longitudeIn ? (
+                        <a href={`https://www.google.com/maps?q=${att.latitudeIn},${att.longitudeIn}`} target="_blank" rel="noopener noreferrer">
+                          Lihat Peta
+                        </a>
+                      ) : '-'}
+                    </td>
+                    <td style={styles.tableCell}>
+                      {att.selfieInUrl ? <a href={`${SERVER_BASE_URL}${att.selfieInUrl}`} target="_blank" rel="noopener noreferrer">Lihat Foto</a> : '-'}
+                    </td>
+                    <td style={styles.tableCell}>
+                      {att.deviceModel || att.deviceOS ? `${att.deviceModel || ''} (${att.deviceOS || ''})` : '-'}
+                    </td>
+                    <td style={styles.tableCellCenter}>
+                      {att.isMockLocationIn === true ? <span style={{color: 'red', fontWeight: 'bold'}}>Ya</span> : (att.isMockLocationIn === false ? 'Tidak' : '-')}
+                    </td>
+                    <td style={styles.tableCellRight}>
+                      {/* **PERBAIKAN: Gunakan att.gpsAccuracyIn dan cek null/undefined** */}
+                      {att.gpsAccuracyIn !== null && att.gpsAccuracyIn !== undefined ? `${att.gpsAccuracyIn.toFixed(1)} m` : '-'}
+                    </td>
+                    <td style={styles.tableCell}>{formatDateTime(att.clockOut)}</td>
+                    <td style={styles.tableCell}>
+                      {att.latitudeOut && att.longitudeOut ? (
+                        <a href={`https://www.google.com/maps?q=${att.latitudeOut},${att.longitudeOut}`} target="_blank" rel="noopener noreferrer">
+                          Lihat Peta
+                        </a>
+                      ) : '-'}
+                    </td>
+                    <td style={styles.tableCell}>
+                       {att.selfieOutUrl ? <a href={`${SERVER_BASE_URL}${att.selfieOutUrl}`} target="_blank" rel="noopener noreferrer">Lihat Foto</a> : '-'}
+                    </td>
+                    <td style={styles.tableCell}>
+                      {/* Asumsi device info sama untuk in & out, atau Anda perlu field terpisah di DB */}
+                      {/* Jika berbeda, gunakan field spesifik seperti att.deviceModelOut */}
+                      {att.deviceModel || att.deviceOS ? `${att.deviceModel || ''} (${att.deviceOS || ''})` : '-'}
+                    </td>
+                     <td style={styles.tableCellCenter}>
+                      {att.isMockLocationOut === true ? <span style={{color: 'red', fontWeight: 'bold'}}>Ya</span> : (att.isMockLocationOut === false ? 'Tidak' : '-')}
+                    </td>
+                    <td style={styles.tableCellRight}>
+                      {/* **PERBAIKAN: Gunakan att.gpsAccuracyOut dan cek null/undefined** */}
+                      {att.gpsAccuracyOut !== null && att.gpsAccuracyOut !== undefined ? `${att.gpsAccuracyOut.toFixed(1)} m` : '-'}
+                    </td>
+                    <td style={styles.tableCell}>{att.status.replace(/_/g, ' ')}</td>
+                    <td style={styles.tableCell}>{att.notes || '-'}
+                    </td>
+                    <td style={styles.tableCellCenter}>
+                      <button 
+                          onClick={() => openStatusEditModal(att)}
+                          style={{ ...styles.actionButton, ...styles.editButton }}
+                          disabled={actionLoading[att.id]}
+                      >
+                          Ubah Status
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-          {/* Paginasi */}
           <div style={styles.pagination}>
             <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1 || isLoading}>
               Sebelumnya
@@ -354,7 +371,6 @@ function AttendanceControlPage() {
         </>
       )}
 
-      {/* Modal/Form untuk Edit Status */}
       {editingRecord && (
         <div style={styles.modalOverlay}>
           <div style={styles.modalContent}>
