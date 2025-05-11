@@ -1,9 +1,10 @@
 // src/pages/UserManagementPage.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import UserForm from '../components/UserForm';
+import UserForm from '../components/UserForm'; // Pastikan path ini benar
 import { Link } from 'react-router-dom';
 
+// **PASTIKAN BARIS INI ADA DAN TIDAK DIKOMENTARI**
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 interface UserData {
@@ -34,7 +35,7 @@ interface ApiErrorResponse {
 interface UserSuccessResponse {
     message: string;
     user?: UserData;
-    data?: UserData;
+    data?: UserData; 
 }
 
 const AVAILABLE_ROLES = ['ADMIN', 'USER', 'YAYASAN', 'REKTOR', 'PR1', 'PR2', 'EMPLOYEE'];
@@ -53,42 +54,52 @@ function UserManagementPage() {
     if (!accessToken) {
         setError('Token autentikasi tidak tersedia.');
         setIsLoading(false);
+        console.error('UserManagementPage: Token tidak ditemukan dari context.');
         return;
     }
+    // **PASTIKAN PENGECEKAN INI ADA**
     if (!API_BASE_URL) {
-        setError('Konfigurasi URL API (VITE_API_BASE_URL) tidak ditemukan.');
+        const errMsg = 'UserManagementPage: Konfigurasi URL API (VITE_API_BASE_URL) tidak ditemukan.';
+        console.error(errMsg);
+        setError(errMsg);
         setIsLoading(false);
         return;
     }
+
     setIsLoading(true);
     setError(null);
+    const fetchUrl = `${API_BASE_URL}/admin/users`; // <-- Gunakan API_BASE_URL
+    console.log(`UserManagementPage: Fetching users from ${fetchUrl}`);
+
     try {
-      const response = await fetch(`${API_BASE_URL}/admin/users`, {
+      const response = await fetch(fetchUrl, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
         },
       });
+
       if (!response.ok) {
         let errorMsg = `Gagal mengambil data user. Status: ${response.status}`;
         try { 
           const errorData = await response.json() as ApiErrorResponse; 
           errorMsg = errorData.message || errorData.error || errorMsg; 
         }
-        catch (parseError) { console.warn("Could not parse error response body. Error:", parseError); }
+        catch (parseError) { console.warn("Could not parse error response body as JSON. Error:", parseError); }
         throw new Error(errorMsg);
       }
       const responseData: { data: UserData[] } = await response.json();
       setUsers(responseData.data || []);
+      console.log('UserManagementPage: Users fetched successfully:', responseData.data);
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Gagal mengambil data user.';
+      const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan tidak diketahui saat mengambil data user.';
       setError(errorMessage);
       setUsers([]);
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken]);
+  }, [accessToken]); // API_BASE_URL adalah konstanta global, tidak perlu di dependensi useCallback jika didefinisikan di luar komponen
 
   useEffect(() => {
     fetchUsers();
@@ -120,7 +131,9 @@ function UserManagementPage() {
       const token = accessToken;
       if (!token) { setError('Token tidak ditemukan.'); return; }
       try {
-        const response = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
+        const deleteUrl = `${API_BASE_URL}/admin/users/${userId}`; // <-- Gunakan API_BASE_URL
+        console.log(`UserManagementPage: Deleting user from ${deleteUrl}`);
+        const response = await fetch(deleteUrl, {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${token}` },
         });
@@ -162,7 +175,7 @@ function UserManagementPage() {
         throw new Error('Token autentikasi tidak ditemukan.');
     }
     const isEditMode = !!formData.id;
-    const url = isEditMode ? `${API_BASE_URL}/admin/users/${formData.id}` : `${API_BASE_URL}/admin/users`;
+    const url = isEditMode ? `${API_BASE_URL}/admin/users/${formData.id}` : `${API_BASE_URL}/admin/users`; // <-- Gunakan API_BASE_URL
     const method = isEditMode ? 'PUT' : 'POST';
     
     interface ApiUserPayload {
@@ -187,6 +200,7 @@ function UserManagementPage() {
         throw new Error('Password wajib diisi.');
       }
     }
+    console.log(`Submitting user data (${method}) to ${url}:`, apiRequestBody);
     try {
       const response = await fetch(url, {
         method: method,
