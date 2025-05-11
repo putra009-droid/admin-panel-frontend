@@ -47,6 +47,11 @@ interface ApiErrorResponse {
   error?: string;
 }
 
+// Tipe untuk respons API GET /api/admin/users/:userId/deductions
+// Sekarang kita harapkan array UserDeduction langsung
+type UserDeductionsApiResponse = UserDeduction[];
+
+
 function UserDeductionsPage() {
   const { userId } = useParams<{ userId: string }>();
   const { accessToken } = useAuth();
@@ -88,6 +93,7 @@ function UserDeductionsPage() {
         const errData = await response.json().catch(() => ({})) as ApiErrorResponse;
         throw new Error(errData.message || errData.error || `Gagal mengambil tipe potongan. Status: ${response.status}`);
       }
+      // Asumsi API mengembalikan array objek DeductionType dengan id, name, calculationType
       const dataFromApi: Array<{id: string, name: string, calculationType: DeductionCalculationType}> = await response.json();
       setAvailableDeductionTypes((dataFromApi || []).map(dt => ({
         id: dt.id,
@@ -109,7 +115,7 @@ function UserDeductionsPage() {
     }
     setIsLoading(true);
     setError(null);
-    console.log(`UserDeductionsPage: Fetching deductions for user ID: ${userId}`);
+    console.log(`UserDeductionsPage: Fetching deductions for user ID: ${userId} from ${API_BASE_URL}/admin/users/${userId}/deductions`);
     try {
       const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/deductions`, {
         headers: { 'Authorization': `Bearer ${accessToken}` },
@@ -118,11 +124,21 @@ function UserDeductionsPage() {
         const errData = await response.json().catch(() => ({})) as ApiErrorResponse;
         throw new Error(errData.message || errData.error || `Gagal mengambil potongan pengguna. Status: ${response.status}`);
       }
-      const data: { data: UserDeduction[] } = await response.json(); // Asumsi API membungkus dalam 'data'
-      setUserDeductions(data.data || []);
-      console.log('UserDeductionsPage: User deductions fetched:', data.data);
+      
+      // **PERBAIKAN PARSING RESPONS: Harapkan array langsung**
+      const responseData = await response.json() as UserDeductionsApiResponse; // Tipe sekarang UserDeduction[]
+      if (Array.isArray(responseData)) {
+        setUserDeductions(responseData);
+        console.log('UserDeductionsPage: User deductions fetched (direct array):', responseData);
+      } else {
+        // Ini seharusnya tidak terjadi jika API mengembalikan array
+        console.warn('UserDeductionsPage: Expected an array for user deductions, but received:', responseData);
+        setUserDeductions([]); // Default ke array kosong jika format tidak sesuai
+        setError('Format data potongan pengguna tidak sesuai dari server.');
+      }
+
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan.';
+      const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan saat mengambil potongan pengguna.';
       setError(errorMessage);
       setUserDeductions([]);
     } finally {
@@ -273,7 +289,7 @@ function UserDeductionsPage() {
   return (
     <div style={styles.container}>
       <Link to="/users" style={styles.backLink}>
-        &larr; Kembali ke Manajemen Pengguna
+        ← Kembali ke Manajemen Pengguna
       </Link>
       <h2 style={styles.title}>Kelola Potongan untuk: {userName || 'Memuat...'}</h2>
       
