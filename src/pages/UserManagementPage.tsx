@@ -1,25 +1,21 @@
 // src/pages/UserManagementPage.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import UserForm from '../components/UserForm'; // Pastikan path ini benar
-import { Link } from 'react-router-dom'; // Untuk link ke halaman detail
+import UserForm from '../components/UserForm';
+import { Link } from 'react-router-dom';
 
-// **TAMBAHAN: Ambil API_BASE_URL dari environment variable Vite**
-// Ini akan digunakan untuk semua panggilan API ke backend
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-// Tipe data untuk User yang diterima dari API
 interface UserData {
   id: string;
   name: string;
   email: string;
   role: string;
-  baseSalary: string | null; // API mungkin mengirim string
+  baseSalary: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
-// Tipe data untuk data yang dikirim ke/dari UserForm
 interface UserFormData {
     id?: string;
     name: string;
@@ -29,18 +25,16 @@ interface UserFormData {
     baseSalary: string | null;
 }
 
-// Tipe untuk respons error umum dari API
 interface ApiErrorResponse {
   message?: string;
   error?: string;
   code?: string;
 }
 
-// Tipe untuk respons sukses dari API user (misal saat tambah/update)
 interface UserSuccessResponse {
     message: string;
-    user?: UserData; // Objek user bisa opsional tergantung respons API
-    data?: UserData; // Atau API Anda mungkin membungkusnya dalam 'data'
+    user?: UserData;
+    data?: UserData;
 }
 
 const AVAILABLE_ROLES = ['ADMIN', 'USER', 'YAYASAN', 'REKTOR', 'PR1', 'PR2', 'EMPLOYEE'];
@@ -59,22 +53,16 @@ function UserManagementPage() {
     if (!accessToken) {
         setError('Token autentikasi tidak tersedia.');
         setIsLoading(false);
-        console.error('UserManagementPage: Token tidak ditemukan dari context.');
         return;
     }
-    if (!API_BASE_URL) { // Validasi API_BASE_URL
-        setError('Konfigurasi URL API tidak ditemukan. Cek VITE_API_BASE_URL.');
+    if (!API_BASE_URL) {
+        setError('Konfigurasi URL API (VITE_API_BASE_URL) tidak ditemukan.');
         setIsLoading(false);
-        console.error('UserManagementPage: VITE_API_BASE_URL is not defined.');
         return;
     }
-
     setIsLoading(true);
     setError(null);
-    console.log('UserManagementPage: Fetching users...');
-
     try {
-      // **PERUBAHAN: Gunakan API_BASE_URL**
       const response = await fetch(`${API_BASE_URL}/admin/users`, {
         method: 'GET',
         headers: {
@@ -82,21 +70,19 @@ function UserManagementPage() {
           'Authorization': `Bearer ${accessToken}`,
         },
       });
-
       if (!response.ok) {
         let errorMsg = `Gagal mengambil data user. Status: ${response.status}`;
         try { 
           const errorData = await response.json() as ApiErrorResponse; 
           errorMsg = errorData.message || errorData.error || errorMsg; 
         }
-        catch (parseError) { console.warn("Could not parse error response body as JSON. Error:", parseError); }
+        catch (parseError) { console.warn("Could not parse error response body. Error:", parseError); }
         throw new Error(errorMsg);
       }
       const responseData: { data: UserData[] } = await response.json();
       setUsers(responseData.data || []);
-      console.log('UserManagementPage: Users fetched successfully:', responseData.data);
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan tidak diketahui saat mengambil data user.';
+      const errorMessage = err instanceof Error ? err.message : 'Gagal mengambil data user.';
       setError(errorMessage);
       setUsers([]);
     } finally {
@@ -128,17 +114,12 @@ function UserManagementPage() {
   };
 
   const handleDeleteUser = async (userId: string, userName: string) => {
-    if (!API_BASE_URL) {
-        setError('Konfigurasi URL API tidak ditemukan.');
-        console.error('UserManagementPage: VITE_API_BASE_URL is not defined for delete.');
-        return;
-    }
+    if (!API_BASE_URL) { setError('Konfigurasi URL API tidak ditemukan.'); return; }
     if (window.confirm(`Apakah Anda yakin ingin menghapus pengguna "${userName}" (ID: ${userId})?`)) {
       setError(null);
       const token = accessToken;
       if (!token) { setError('Token tidak ditemukan.'); return; }
       try {
-        // **PERUBAHAN: Gunakan API_BASE_URL**
         const response = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${token}` },
@@ -149,14 +130,14 @@ function UserManagementPage() {
             const errorData = await response.json() as ApiErrorResponse; 
             errorMsg = errorData.message || errorData.error || errorMsg; 
           }
-          catch (parseError) { console.warn("Could not parse delete error response body as JSON. Error:", parseError); }
+          catch (parseError) { console.warn("Could not parse delete error response body. Error:", parseError); }
           throw new Error(errorMsg);
         }
         const result: { message: string } = await response.json();
         alert(result.message || `Pengguna "${userName}" berhasil dihapus.`);
         fetchUsers();
       } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan tidak diketahui saat menghapus.';
+        const errorMessage = err instanceof Error ? err.message : 'Gagal menghapus user.';
         setError(`Gagal menghapus: ${errorMessage}`);
       }
     }
@@ -164,14 +145,12 @@ function UserManagementPage() {
 
   const handleResetPassword = (userId: string) => {
     alert(`Fungsi Reset password untuk pengguna ID: ${userId} belum diimplementasikan.`);
-    console.log(`Reset password untuk pengguna dengan ID: ${userId}`);
   };
 
   const handleFormSubmit = async (formData: UserFormData) => {
-    if (!API_BASE_URL) {
-        setError('Konfigurasi URL API tidak ditemukan.');
-        setIsSubmitting(false);
-        console.error('UserManagementPage: VITE_API_BASE_URL is not defined for form submit.');
+    if (!API_BASE_URL) { 
+        setError('Konfigurasi URL API tidak ditemukan.'); 
+        setIsSubmitting(false); 
         throw new Error('Konfigurasi URL API tidak ditemukan.');
     }
     setIsSubmitting(true);
@@ -183,7 +162,6 @@ function UserManagementPage() {
         throw new Error('Token autentikasi tidak ditemukan.');
     }
     const isEditMode = !!formData.id;
-    // **PERUBAHAN: Gunakan API_BASE_URL**
     const url = isEditMode ? `${API_BASE_URL}/admin/users/${formData.id}` : `${API_BASE_URL}/admin/users`;
     const method = isEditMode ? 'PUT' : 'POST';
     
@@ -209,7 +187,6 @@ function UserManagementPage() {
         throw new Error('Password wajib diisi.');
       }
     }
-    console.log(`Submitting user data (${method}) to ${url}:`, apiRequestBody);
     try {
       const response = await fetch(url, {
         method: method,
@@ -225,16 +202,15 @@ function UserManagementPage() {
           const errorData = await response.json() as ApiErrorResponse; 
           errorMsg = errorData.message || errorData.error || errorMsg; 
         }
-        catch (parseError) { console.warn("Could not parse form submit error response body as JSON. Error:", parseError); }
+        catch (parseError) { console.warn("Could not parse form submit error response body. Error:", parseError); }
         throw new Error(errorMsg);
       }
       const result = await response.json() as UserSuccessResponse; 
-      console.log(`Form submit successful:`, result);
       alert(result.message || `Pengguna berhasil ${isEditMode ? 'diperbarui' : 'ditambahkan'}!`);
       setShowForm(false);
       fetchUsers();
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan tidak diketahui saat submit.';
+      const errorMessage = err instanceof Error ? err.message : 'Gagal submit form.';
       setError(`Gagal submit: ${errorMessage}`);
       throw err;
     } finally {
