@@ -43,6 +43,10 @@ interface ApiErrorResponse {
   error?: string;
 }
 
+// Tipe untuk respons API GET /api/admin/users/:userId/allowances
+// Bisa jadi array UserAllowance langsung, atau objek dengan properti 'data'
+type UserAllowancesApiResponse = UserAllowance[] | { data?: UserAllowance[], message?: string };
+
 
 function UserAllowancesPage() {
   const { userId } = useParams<{ userId: string }>();
@@ -112,11 +116,30 @@ function UserAllowancesPage() {
         const errData = await response.json().catch(() => ({})) as ApiErrorResponse;
         throw new Error(errData.message || errData.error || `Gagal mengambil tunjangan pengguna. Status: ${response.status}`);
       }
-      const data: { data: UserAllowance[] } = await response.json(); // Asumsi API membungkus dalam 'data'
-      setUserAllowances(data.data || []);
-      console.log('UserAllowancesPage: User allowances fetched:', data.data);
+      
+      // **PERBAIKAN PARSING RESPONS**
+      const responseData = await response.json() as UserAllowancesApiResponse;
+      if (Array.isArray(responseData)) {
+        // Jika API mengembalikan array UserAllowance secara langsung
+        setUserAllowances(responseData);
+        console.log('UserAllowancesPage: User allowances fetched (direct array):', responseData);
+      } else if (responseData && typeof responseData === 'object' && 'data' in responseData && Array.isArray(responseData.data)) {
+        // Jika API mengembalikan objek dengan properti 'data' yang berisi array UserAllowance
+        setUserAllowances(responseData.data);
+        console.log('UserAllowancesPage: User allowances fetched (from data property):', responseData.data);
+      } else if (responseData && typeof responseData === 'object' && !('data' in responseData) && Object.keys(responseData).length === 0) {
+        // Kasus jika API mengembalikan objek kosong {} jika tidak ada data
+        console.log('UserAllowancesPage: No user allowances found (empty object from API).');
+        setUserAllowances([]);
+      }
+      else {
+        // Jika struktur tidak dikenal
+        console.warn('UserAllowancesPage: Received unknown data structure for user allowances or no data.', responseData);
+        setUserAllowances([]);
+      }
+
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan.';
+      const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan saat mengambil tunjangan pengguna.';
       setError(errorMessage);
       setUserAllowances([]);
     } finally {
@@ -198,7 +221,7 @@ function UserAllowancesPage() {
 
     const bodyToSubmit = {
         allowanceTypeId: formData.allowanceTypeId,
-        amount: formData.amount, // Form mengirim string, backend akan mengkonversi ke Decimal
+        amount: formData.amount,
     };
 
     console.log(`Submitting user allowance data (${method}) to ${url}:`, bodyToSubmit);
@@ -248,7 +271,7 @@ function UserAllowancesPage() {
   return (
     <div style={styles.container}>
       <Link to="/users" style={styles.backLink}>
-        &larr; Kembali ke Manajemen Pengguna
+        ← Kembali ke Manajemen Pengguna
       </Link>
       <h2 style={styles.title}>Kelola Tunjangan untuk: {userName || 'Memuat...'}</h2>
       
@@ -292,7 +315,6 @@ function UserAllowancesPage() {
 
       {showForm && userId && (
         <UserAllowanceForm
-          // userId={userId} // Tidak perlu dikirim lagi
           initialData={editingData}
           availableAllowanceTypes={availableAllowanceTypes}
           onSubmit={handleFormSubmit}
