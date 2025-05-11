@@ -4,7 +4,6 @@ import { useAuth } from '../context/AuthContext';
 import UserForm from '../components/UserForm'; // Pastikan path ini benar
 import { Link } from 'react-router-dom';
 
-// **PASTIKAN BARIS INI ADA DAN TIDAK DIKOMENTARI**
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 interface UserData {
@@ -34,9 +33,14 @@ interface ApiErrorResponse {
 
 interface UserSuccessResponse {
     message: string;
-    user?: UserData;
-    data?: UserData; 
+    user?: UserData; // Untuk tambah/edit
+    // data?: UserData; // Jika API tambah/edit membungkus dalam 'data'
 }
+
+// Tipe untuk respons API GET /api/admin/users
+// Asumsi API bisa mengembalikan array UserData langsung, atau objek dengan properti 'data'
+type UsersApiResponse = UserData[] | { data: UserData[], message?: string, currentPage?: number, totalPages?: number, totalItems?: number };
+
 
 const AVAILABLE_ROLES = ['ADMIN', 'USER', 'YAYASAN', 'REKTOR', 'PR1', 'PR2', 'EMPLOYEE'];
 
@@ -57,7 +61,6 @@ function UserManagementPage() {
         console.error('UserManagementPage: Token tidak ditemukan dari context.');
         return;
     }
-    // **PASTIKAN PENGECEKAN INI ADA**
     if (!API_BASE_URL) {
         const errMsg = 'UserManagementPage: Konfigurasi URL API (VITE_API_BASE_URL) tidak ditemukan.';
         console.error(errMsg);
@@ -68,7 +71,7 @@ function UserManagementPage() {
 
     setIsLoading(true);
     setError(null);
-    const fetchUrl = `${API_BASE_URL}/admin/users`; // <-- Gunakan API_BASE_URL
+    const fetchUrl = `${API_BASE_URL}/admin/users`;
     console.log(`UserManagementPage: Fetching users from ${fetchUrl}`);
 
     try {
@@ -89,9 +92,23 @@ function UserManagementPage() {
         catch (parseError) { console.warn("Could not parse error response body as JSON. Error:", parseError); }
         throw new Error(errorMsg);
       }
-      const responseData: { data: UserData[] } = await response.json();
-      setUsers(responseData.data || []);
-      console.log('UserManagementPage: Users fetched successfully:', responseData.data);
+      
+      // **PERBAIKAN PARSING RESPONS**
+      const responseData = await response.json() as UsersApiResponse;
+      if (Array.isArray(responseData)) {
+        // Jika API mengembalikan array pengguna secara langsung
+        setUsers(responseData);
+        console.log('UserManagementPage: Users fetched successfully (direct array):', responseData);
+      } else if (responseData && typeof responseData === 'object' && 'data' in responseData && Array.isArray(responseData.data)) {
+        // Jika API mengembalikan objek dengan properti 'data' yang berisi array pengguna
+        setUsers(responseData.data);
+        console.log('UserManagementPage: Users fetched successfully (from data property):', responseData.data);
+      } else {
+        // Jika struktur tidak dikenal atau data tidak ada
+        console.warn('UserManagementPage: Received unknown data structure from API or no user data.', responseData);
+        setUsers([]);
+      }
+
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan tidak diketahui saat mengambil data user.';
       setError(errorMessage);
@@ -99,7 +116,7 @@ function UserManagementPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken]); // API_BASE_URL adalah konstanta global, tidak perlu di dependensi useCallback jika didefinisikan di luar komponen
+  }, [accessToken]);
 
   useEffect(() => {
     fetchUsers();
@@ -131,7 +148,7 @@ function UserManagementPage() {
       const token = accessToken;
       if (!token) { setError('Token tidak ditemukan.'); return; }
       try {
-        const deleteUrl = `${API_BASE_URL}/admin/users/${userId}`; // <-- Gunakan API_BASE_URL
+        const deleteUrl = `${API_BASE_URL}/admin/users/${userId}`;
         console.log(`UserManagementPage: Deleting user from ${deleteUrl}`);
         const response = await fetch(deleteUrl, {
           method: 'DELETE',
@@ -175,7 +192,7 @@ function UserManagementPage() {
         throw new Error('Token autentikasi tidak ditemukan.');
     }
     const isEditMode = !!formData.id;
-    const url = isEditMode ? `${API_BASE_URL}/admin/users/${formData.id}` : `${API_BASE_URL}/admin/users`; // <-- Gunakan API_BASE_URL
+    const url = isEditMode ? `${API_BASE_URL}/admin/users/${formData.id}` : `${API_BASE_URL}/admin/users`;
     const method = isEditMode ? 'PUT' : 'POST';
     
     interface ApiUserPayload {
