@@ -1,9 +1,8 @@
 // src/pages/AllowanceTypesPage.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import AllowanceTypeForm from '../components/AllowanceTypeForm'; // Pastikan path ini benar
+import AllowanceTypeForm from '../components/AllowanceTypeForm'; // Anda perlu menata ulang komponen ini juga
 
-// Tipe data untuk Tipe Tunjangan dari API
 interface AllowanceType {
   id: string;
   name: string;
@@ -13,7 +12,6 @@ interface AllowanceType {
   updatedAt?: string;
 }
 
-// Tipe data untuk form (cocokkan dengan AllowanceTypeForm)
 interface AllowanceTypeFormData {
     id?: string;
     name: string;
@@ -24,7 +22,7 @@ interface AllowanceTypeFormData {
 function AllowanceTypesPage() {
   const [allowanceTypes, setAllowanceTypes] = useState<AllowanceType[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false); // Untuk form
   const [error, setError] = useState<string | null>(null);
   const { accessToken } = useAuth();
 
@@ -34,6 +32,7 @@ function AllowanceTypesPage() {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
   const fetchAllowanceTypes = useCallback(async () => {
+    // ... (logika fetch data Anda tidak berubah)
     if (!accessToken) {
       setError('Token autentikasi tidak tersedia.');
       setIsLoading(false);
@@ -87,6 +86,7 @@ function AllowanceTypesPage() {
   };
 
   const handleDelete = async (id: string, name: string) => {
+    // ... (logika delete Anda tidak berubah)
     if (!API_BASE_URL) {
         setError('Konfigurasi URL API tidak ditemukan.');
         return;
@@ -113,6 +113,7 @@ function AllowanceTypesPage() {
   };
 
   const handleFormSubmit = async (formData: AllowanceTypeFormData) => {
+    // ... (logika submit form Anda tidak berubah, tapi pastikan form juga di-style)
     if (!API_BASE_URL) {
         setError('Konfigurasi URL API tidak ditemukan.');
         setIsSubmitting(false);
@@ -168,78 +169,99 @@ function AllowanceTypesPage() {
     setError(null);
   };
 
-  if (isLoading && !showForm) return <div style={styles.container}>Memuat tipe tunjangan...</div>;
-  if (error && !showForm) return <div style={styles.container}><p style={styles.errorText}>Error: {error}</p></div>;
+  if (isLoading && !showForm) {
+    return <div className="p-6 text-center text-slate-600">Memuat tipe tunjangan...</div>;
+  }
 
   return (
-    <div style={styles.container}>
-      <h2 style={styles.title}>Manajemen Tipe Tunjangan</h2>
-      <div style={styles.actionBar}>
-        <p>Total Tipe: {allowanceTypes.length}</p>
-        <button onClick={handleAdd} style={styles.addButton} disabled={showForm || isLoading}>
+    <div className="p-4 md:p-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Manajemen Tipe Tunjangan</h1>
+        <button
+          onClick={handleAdd}
+          className="mt-3 sm:mt-0 bg-sky-600 hover:bg-sky-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:shadow-lg transition-all duration-150 ease-in-out text-sm disabled:opacity-50"
+          disabled={showForm || isLoading}
+        >
           + Tambah Tipe Tunjangan
         </button>
       </div>
 
-      {isLoading && !showForm && <p>Memuat data...</p>}
-      {!isLoading && (
-        <table style={styles.table}>
-          <thead style={styles.tableHead}>
-            <tr>
-              <th style={styles.tableHeader}>Nama</th>
-              <th style={styles.tableHeader}>Deskripsi</th>
-              <th style={styles.tableHeader}>Tetap?</th>
-              <th style={styles.tableHeader}>Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {allowanceTypes.length === 0 ? (
-              <tr><td colSpan={4} style={styles.tableCellCenter}>Tidak ada data.</td></tr>
-            ) : (
-              allowanceTypes.map((item) => (
-                <tr key={item.id} style={{...styles.tableRow, backgroundColor: allowanceTypes.indexOf(item) % 2 === 0 ? '#f9f9f9' : 'white'}}>
-                  <td style={styles.tableCell}>{item.name}</td>
-                  <td style={styles.tableCell}>{item.description || '-'}</td>
-                  <td style={styles.tableCellCenter}>{item.isFixed ? 'Ya' : 'Tidak'}</td>
-                  <td style={styles.tableCellCenter}>
-                    <button onClick={() => handleEdit(item)} style={{ ...styles.actionButton, ...styles.editButton }} disabled={showForm}>Edit</button>
-                    <button onClick={() => handleDelete(item.id, item.name)} style={{ ...styles.actionButton, ...styles.deleteButton }} disabled={showForm}>Hapus</button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      {error && !showForm && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative mb-4" role="alert">
+          <strong className="font-bold">Error: </strong>
+          <span className="block sm:inline">{error}</span>
+        </div>
       )}
 
-      {showForm && (
-        <AllowanceTypeForm
-          initialData={editingData}
-          onSubmit={handleFormSubmit}
-          onCancel={handleCancelForm}
-          isLoading={isSubmitting}
-        />
+      {showForm ? (
+        <div className="bg-white p-6 rounded-xl shadow-xl">
+          <h2 className="text-xl font-semibold text-slate-700 mb-4">
+            {editingData ? 'Edit Tipe Tunjangan' : 'Tambah Tipe Tunjangan Baru'}
+          </h2>
+          <AllowanceTypeForm // Komponen ini juga perlu di-style dengan Tailwind
+            initialData={editingData}
+            onSubmit={handleFormSubmit}
+            onCancel={handleCancelForm}
+            isLoading={isSubmitting}
+          />
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl shadow-xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+            <h3 className="text-lg font-semibold text-slate-700">Daftar Tipe Tunjangan</h3>
+            <span className="text-sm text-slate-500">Total: {allowanceTypes.length}</span>
+          </div>
+          {isLoading ? (
+             <p className="p-6 text-center text-slate-500">Memuat data...</p>
+          ) : allowanceTypes.length === 0 ? (
+            <p className="p-6 text-center text-slate-500">Tidak ada data tipe tunjangan.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left text-slate-600">
+                <thead className="text-xs text-slate-700 uppercase bg-slate-100">
+                  <tr>
+                    <th scope="col" className="px-6 py-3">Nama</th>
+                    <th scope="col" className="px-6 py-3">Deskripsi</th>
+                    <th scope="col" className="px-6 py-3 text-center">Tetap?</th>
+                    <th scope="col" className="px-6 py-3 text-center">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allowanceTypes.map((item) => (
+                    <tr key={item.id} className="bg-white border-b hover:bg-slate-50">
+                      <td className="px-6 py-4 font-medium text-slate-900 whitespace-nowrap">{item.name}</td>
+                      <td className="px-6 py-4">{item.description || '-'}</td>
+                      <td className="px-6 py-4 text-center">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${item.isFixed ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {item.isFixed ? 'Ya' : 'Tidak'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center whitespace-nowrap">
+                        <button
+                          onClick={() => handleEdit(item)}
+                          className="font-medium text-sky-600 hover:text-sky-800 hover:underline mr-3 text-xs py-1 px-2 rounded bg-sky-100 hover:bg-sky-200 transition-colors"
+                          disabled={showForm}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(item.id, item.name)}
+                          className="font-medium text-red-600 hover:text-red-800 hover:underline text-xs py-1 px-2 rounded bg-red-100 hover:bg-red-200 transition-colors"
+                          disabled={showForm}
+                        >
+                          Hapus
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
 }
-
-// Styling
-const styles: { [key: string]: React.CSSProperties } = {
-  container: { padding: '20px', fontFamily: 'sans-serif' },
-  title: { marginBottom: '20px', color: '#333' },
-  actionBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' },
-  addButton: { padding: '8px 15px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' },
-  table: { width: '100%', borderCollapse: 'collapse', fontSize: '14px', border: '1px solid #dee2e6' },
-  tableHead: { backgroundColor: '#f8f9fa' },
-  tableHeader: { padding: '10px', border: '1px solid #dee2e6', textAlign: 'left', fontWeight: 'bold' },
-  tableRow: { /* Styling dasar untuk baris */ },
-  tableCell: { padding: '10px', border: '1px solid #dee2e6', verticalAlign: 'middle' },
-  tableCellCenter: { padding: '10px', border: '1px solid #dee2e6', textAlign: 'center', verticalAlign: 'middle' },
-  actionButton: { marginRight: '5px', padding: '4px 8px', fontSize: '12px', border: 'none', borderRadius: '3px', cursor: 'pointer', color: 'white' },
-  editButton: { backgroundColor: '#007bff' },
-  deleteButton: { backgroundColor: '#dc3545' },
-  errorText: { color: '#721c24', border: '1px solid #f5c6cb', padding: '10px', borderRadius: '4px', backgroundColor: '#f8d7da', marginBottom: '15px' },
-};
 
 export default AllowanceTypesPage;

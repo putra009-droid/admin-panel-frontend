@@ -1,15 +1,13 @@
 // src/pages/UserDeductionsPage.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import UserDeductionForm from '../components/UserDeductionForm';
+import UserDeductionForm from '../components/UserDeductionForm'; // Komponen ini juga perlu di-style
 import type { DeductionCalculationType } from '../types/deductionTypes';
-import { DeductionCalculationTypeValue } from '../types/deductionTypes'; // Untuk logika di handleFormSubmit
+import { DeductionCalculationTypeValue } from '../types/deductionTypes';
 
-// Ambil API_BASE_URL dari environment variable Vite
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-// Tipe data untuk UserDeduction yang diterima dari API
 interface UserDeduction {
   id: string;
   userId: string;
@@ -26,14 +24,12 @@ interface UserDeduction {
   updatedAt?: string;
 }
 
-// Tipe data untuk Tipe Potongan (untuk dropdown di form)
 interface DeductionTypeOption {
   id: string;
   name: string;
   calculationType: DeductionCalculationType;
 }
 
-// Tipe data untuk data yang dikirim ke/dari UserDeductionForm
 interface UserDeductionFormData {
     id?: string;
     deductionTypeId: string;
@@ -41,14 +37,6 @@ interface UserDeductionFormData {
     assignedPercentage?: string | null;
 }
 
-// Tipe untuk respons error umum dari API
-interface ApiErrorResponse {
-  message?: string;
-  error?: string;
-}
-
-// Tipe untuk respons API GET /api/admin/users/:userId/deductions
-// Sekarang kita harapkan array UserDeduction langsung
 type UserDeductionsApiResponse = UserDeduction[];
 
 
@@ -68,6 +56,7 @@ function UserDeductionsPage() {
   const [editingData, setEditingData] = useState<UserDeductionFormData | null>(null);
 
   const fetchUserName = useCallback(async () => {
+    // ... (logika Anda tidak berubah)
     if (!accessToken || !userId || !API_BASE_URL) return;
     try {
       const response = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
@@ -83,24 +72,22 @@ function UserDeductionsPage() {
   }, [accessToken, userId, API_BASE_URL]);
 
   const fetchAvailableDeductionTypes = useCallback(async () => {
+    // ... (logika Anda tidak berubah)
     if (!accessToken || !API_BASE_URL) return;
-    console.log('UserDeductionsPage: Fetching available deduction types...');
     try {
       const response = await fetch(`${API_BASE_URL}/admin/deduction-types`, {
         headers: { 'Authorization': `Bearer ${accessToken}` },
       });
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({})) as ApiErrorResponse;
+        const errData = await response.json().catch(() => ({}));
         throw new Error(errData.message || errData.error || `Gagal mengambil tipe potongan. Status: ${response.status}`);
       }
-      // Asumsi API mengembalikan array objek DeductionType dengan id, name, calculationType
       const dataFromApi: Array<{id: string, name: string, calculationType: DeductionCalculationType}> = await response.json();
       setAvailableDeductionTypes((dataFromApi || []).map(dt => ({
         id: dt.id,
         name: dt.name,
         calculationType: dt.calculationType,
       })));
-      console.log('UserDeductionsPage: Available deduction types fetched:', dataFromApi);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan saat mengambil tipe potongan.';
       setError(prev => prev ? `${prev}\n${errorMessage}` : errorMessage);
@@ -108,6 +95,7 @@ function UserDeductionsPage() {
   }, [accessToken, API_BASE_URL]);
 
   const fetchUserDeductions = useCallback(async () => {
+    // ... (logika Anda tidak berubah)
     if (!accessToken || !userId || !API_BASE_URL) {
       setError('Parameter tidak lengkap atau token/URL API tidak tersedia.');
       setIsLoading(false);
@@ -115,28 +103,21 @@ function UserDeductionsPage() {
     }
     setIsLoading(true);
     setError(null);
-    console.log(`UserDeductionsPage: Fetching deductions for user ID: ${userId} from ${API_BASE_URL}/admin/users/${userId}/deductions`);
     try {
       const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/deductions`, {
         headers: { 'Authorization': `Bearer ${accessToken}` },
       });
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({})) as ApiErrorResponse;
+        const errData = await response.json().catch(() => ({}));
         throw new Error(errData.message || errData.error || `Gagal mengambil potongan pengguna. Status: ${response.status}`);
       }
-      
-      // **PERBAIKAN PARSING RESPONS: Harapkan array langsung**
-      const responseData = await response.json() as UserDeductionsApiResponse; // Tipe sekarang UserDeduction[]
+      const responseData = await response.json() as UserDeductionsApiResponse;
       if (Array.isArray(responseData)) {
         setUserDeductions(responseData);
-        console.log('UserDeductionsPage: User deductions fetched (direct array):', responseData);
       } else {
-        // Ini seharusnya tidak terjadi jika API mengembalikan array
-        console.warn('UserDeductionsPage: Expected an array for user deductions, but received:', responseData);
-        setUserDeductions([]); // Default ke array kosong jika format tidak sesuai
+        setUserDeductions([]);
         setError('Format data potongan pengguna tidak sesuai dari server.');
       }
-
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan saat mengambil potongan pengguna.';
       setError(errorMessage);
@@ -147,6 +128,7 @@ function UserDeductionsPage() {
   }, [accessToken, userId, API_BASE_URL]);
 
   useEffect(() => {
+    // ... (logika Anda tidak berubah)
     if (userId && accessToken) {
       fetchUserName();
       fetchAvailableDeductionTypes();
@@ -155,6 +137,7 @@ function UserDeductionsPage() {
   }, [userId, accessToken, fetchUserName, fetchAvailableDeductionTypes, fetchUserDeductions]);
 
   const handleAdd = () => {
+    // ... (logika Anda tidak berubah)
     if (availableDeductionTypes.length === 0) {
         alert("Tidak ada tipe potongan yang tersedia. Tambahkan dulu di 'Kelola Tipe Potongan'.");
         return;
@@ -165,6 +148,7 @@ function UserDeductionsPage() {
   };
 
   const handleEdit = (item: UserDeduction) => {
+    // ... (logika Anda tidak berubah)
     const formData: UserDeductionFormData = {
       id: item.id,
       deductionTypeId: item.deductionTypeId,
@@ -177,6 +161,7 @@ function UserDeductionsPage() {
   };
 
   const handleDelete = async (userDeductionId: string, deductionName: string) => {
+    // ... (logika Anda tidak berubah)
     if (!API_BASE_URL) { setError('URL API tidak ditemukan.'); return; }
     if (window.confirm(`Yakin ingin menghapus potongan "${deductionName}" untuk pengguna ini?`)) {
       setError(null);
@@ -187,7 +172,7 @@ function UserDeductionsPage() {
           headers: { 'Authorization': `Bearer ${accessToken}` },
         });
         if (!response.ok) {
-          const errData = await response.json().catch(() => ({})) as ApiErrorResponse;
+          const errData = await response.json().catch(() => ({}));
           throw new Error(errData.message || errData.error || `Gagal menghapus potongan. Status: ${response.status}`);
         }
         alert(`Potongan "${deductionName}" berhasil dihapus.`);
@@ -200,6 +185,7 @@ function UserDeductionsPage() {
   };
 
   const handleFormSubmit = async (formData: UserDeductionFormData) => {
+    // ... (logika Anda tidak berubah)
     if (!API_BASE_URL) { 
         setError('URL API tidak ditemukan.'); 
         setIsSubmitting(false); 
@@ -231,19 +217,16 @@ function UserDeductionsPage() {
         } else if (selectedType.calculationType === DeductionCalculationTypeValue.PERCENTAGE_USER) {
             bodyToSubmit.assignedPercentage = formData.assignedPercentage;
             bodyToSubmit.assignedAmount = null;
-        } else {
+        } else { // Untuk FIXED_RULE dan PERCENTAGE_RULE, nilai spesifik pengguna tidak diperlukan
             bodyToSubmit.assignedAmount = null;
             bodyToSubmit.assignedPercentage = null;
         }
     } else {
-        console.error("Tipe potongan yang dipilih tidak ditemukan.");
         setError("Tipe potongan yang dipilih tidak valid.");
         setIsSubmitting(false);
         throw new Error("Tipe potongan yang dipilih tidak valid.");
     }
-
-    console.log(`Submitting user deduction data (${method}) to ${url}:`, bodyToSubmit);
-
+    
     try {
       const response = await fetch(url, {
         method: method,
@@ -255,7 +238,7 @@ function UserDeductionsPage() {
       });
 
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({})) as ApiErrorResponse;
+        const errData = await response.json().catch(() => ({}));
         throw new Error(errData.message || errData.error || `Gagal submit. Status: ${response.status}`);
       }
       alert(`Potongan pengguna berhasil ${isEditMode ? 'diperbarui' : 'ditambahkan'}!`);
@@ -277,92 +260,129 @@ function UserDeductionsPage() {
   };
 
   if (!userId) {
-    return <div style={styles.container}>User ID tidak ditemukan di URL.</div>;
+    return (
+        <div className="p-6">
+            <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded-lg relative" role="alert">
+                User ID tidak ditemukan di URL.
+            </div>
+        </div>
+    );
   }
+
   if (isLoading && !showForm) {
-    return <div style={styles.container}>Memuat data potongan untuk pengguna...</div>;
-  }
-  if (error && !showForm) {
-    return <div style={styles.container}><p style={styles.errorText}>Error: {error}</p></div>;
+    return <div className="p-6 text-center text-slate-600">Memuat data potongan untuk pengguna...</div>;
   }
 
   return (
-    <div style={styles.container}>
-      <Link to="/users" style={styles.backLink}>
-        ← Kembali ke Manajemen Pengguna
-      </Link>
-      <h2 style={styles.title}>Kelola Potongan untuk: {userName || 'Memuat...'}</h2>
-      
-      <div style={styles.actionBar}>
-        <p>Total Potongan Ditetapkan: {userDeductions.length}</p>
-        <button onClick={handleAdd} style={styles.addButton} disabled={showForm || isLoading}>
-          + Tambah Potongan Baru
+    <div className="p-4 md:p-6">
+      <div className="mb-6">
+        <Link to="/users" className="text-sky-600 hover:text-sky-800 hover:underline text-sm font-medium flex items-center">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+          </svg>
+          Kembali ke Manajemen Pengguna
+        </Link>
+      </div>
+
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">
+          Kelola Potongan: <span className="text-sky-700">{userName || 'Memuat...'}</span>
+        </h1>
+        <button
+          onClick={handleAdd}
+          className="mt-3 sm:mt-0 bg-purple-500 hover:bg-purple-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:shadow-lg transition-all duration-150 ease-in-out text-sm disabled:opacity-50"
+          disabled={showForm || isLoading || availableDeductionTypes.length === 0}
+        >
+          + Tambah Potongan
         </button>
       </div>
 
-      {isLoading && !showForm && <p>Memuat data...</p>}
-      {!isLoading && (
-        <table style={styles.table}>
-          <thead style={styles.tableHead}>
-            <tr>
-              <th style={styles.tableHeader}>Nama Potongan</th>
-              <th style={styles.tableHeader}>Tipe Kalkulasi</th>
-              <th style={styles.tableHeader}>Jumlah (Rp)</th>
-              <th style={styles.tableHeader}>Persentase (%)</th>
-              <th style={styles.tableHeader}>Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {userDeductions.length === 0 ? (
-              <tr><td colSpan={5} style={styles.tableCellCenter}>Tidak ada potongan yang ditetapkan untuk pengguna ini.</td></tr>
-            ) : (
-              userDeductions.map((ud, index) => (
-                <tr key={ud.id} style={{...styles.tableRow, backgroundColor: index % 2 === 0 ? '#f9f9f9' : 'white'}}>
-                  <td style={styles.tableCell}>{ud.deductionType?.name || 'Tipe Dihapus'}</td>
-                  <td style={styles.tableCell}>{ud.deductionType?.calculationType.replace(/_/g, ' ') || '-'}</td>
-                  <td style={styles.tableCellRight}>{ud.assignedAmount ? parseFloat(ud.assignedAmount).toLocaleString('id-ID') : '-'}</td>
-                  <td style={styles.tableCellRight}>{ud.assignedPercentage ? `${parseFloat(ud.assignedPercentage)}%` : '-'}</td>
-                  <td style={styles.tableCellCenter}>
-                    <button onClick={() => handleEdit(ud)} style={{ ...styles.actionButton, ...styles.editButton }} disabled={showForm}>Edit</button>
-                    <button onClick={() => handleDelete(ud.id, ud.deductionType?.name || 'Potongan Ini')} style={{ ...styles.actionButton, ...styles.deleteButton }} disabled={showForm}>Hapus</button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      {availableDeductionTypes.length === 0 && !showForm && !isLoading && (
+         <div className="bg-amber-100 border-l-4 border-amber-500 text-amber-700 p-4 mb-4" role="alert">
+            <p className="font-bold">Informasi</p>
+            <p>Tidak ada tipe potongan yang tersedia. Silakan tambahkan tipe potongan terlebih dahulu di halaman "Kelola Tipe Potongan".</p>
+        </div>
       )}
 
-      {showForm && userId && (
-        <UserDeductionForm
-          initialData={editingData}
-          availableDeductionTypes={availableDeductionTypes}
-          onSubmit={handleFormSubmit}
-          onCancel={handleCancelForm}
-          isLoading={isSubmitting}
-        />
+      {error && !showForm && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative mb-4" role="alert">
+          <strong className="font-bold">Error: </strong>
+          <span className="block sm:inline">{error}</span>
+        </div>
+      )}
+
+      {showForm && userId ? (
+        <div className="bg-white p-6 rounded-xl shadow-xl">
+          <h2 className="text-xl font-semibold text-slate-700 mb-4">
+            {editingData ? 'Edit Potongan Pengguna' : 'Tambah Potongan Baru untuk Pengguna'}
+          </h2>
+          <UserDeductionForm // Komponen ini juga perlu di-style dengan Tailwind
+            initialData={editingData}
+            availableDeductionTypes={availableDeductionTypes}
+            onSubmit={handleFormSubmit}
+            onCancel={handleCancelForm}
+            isLoading={isSubmitting}
+          />
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl shadow-xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+            <h3 className="text-lg font-semibold text-slate-700">Daftar Potongan Diterima</h3>
+            <span className="text-sm text-slate-500">Total: {userDeductions.length}</span>
+          </div>
+           {isLoading ? (
+             <p className="p-6 text-center text-slate-500">Memuat data...</p>
+          ) : userDeductions.length === 0 ? (
+            <p className="p-6 text-center text-slate-500">Tidak ada potongan yang ditetapkan untuk pengguna ini.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left text-slate-600">
+                <thead className="text-xs text-slate-700 uppercase bg-slate-100">
+                  <tr>
+                    <th scope="col" className="px-6 py-3">Nama Potongan</th>
+                    <th scope="col" className="px-6 py-3">Tipe Kalkulasi</th>
+                    <th scope="col" className="px-6 py-3 text-right">Jumlah (Rp)</th>
+                    <th scope="col" className="px-6 py-3 text-right">Persentase (%)</th>
+                    <th scope="col" className="px-6 py-3 text-center">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {userDeductions.map((ud) => (
+                    <tr key={ud.id} className="bg-white border-b hover:bg-slate-50">
+                      <td className="px-6 py-4 font-medium text-slate-900 whitespace-nowrap">{ud.deductionType?.name || 'Tipe Dihapus/Tidak Valid'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">{(ud.deductionType?.calculationType || '').replace(/_/g, ' ')}</td>
+                      <td className="px-6 py-4 text-right font-semibold whitespace-nowrap">
+                        {ud.assignedAmount ? parseFloat(ud.assignedAmount).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 0 }) : '-'}
+                      </td>
+                      <td className="px-6 py-4 text-right font-semibold whitespace-nowrap">
+                        {ud.assignedPercentage ? `${parseFloat(ud.assignedPercentage)}%` : '-'}
+                      </td>
+                      <td className="px-6 py-4 text-center whitespace-nowrap">
+                        <button
+                          onClick={() => handleEdit(ud)}
+                          className="font-medium text-sky-600 hover:text-sky-800 hover:underline mr-3 text-xs py-1 px-2 rounded bg-sky-100 hover:bg-sky-200 transition-colors"
+                          disabled={showForm}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(ud.id, ud.deductionType?.name || 'Potongan Ini')}
+                          className="font-medium text-red-600 hover:text-red-800 hover:underline text-xs py-1 px-2 rounded bg-red-100 hover:bg-red-200 transition-colors"
+                          disabled={showForm}
+                        >
+                          Hapus
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
 }
-
-const styles: { [key: string]: React.CSSProperties } = {
-  container: { padding: '20px', fontFamily: 'sans-serif' },
-  backLink: { marginBottom: '20px', display: 'inline-block', color: '#007bff', textDecoration: 'none' },
-  title: { marginBottom: '20px', color: '#333' },
-  actionBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' },
-  addButton: { padding: '8px 15px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' },
-  table: { width: '100%', borderCollapse: 'collapse', fontSize: '14px', border: '1px solid #dee2e6' },
-  tableHead: { backgroundColor: '#f8f9fa' },
-  tableHeader: { padding: '10px', border: '1px solid #dee2e6', textAlign: 'left', fontWeight: 'bold' },
-  tableRow: {},
-  tableCell: { padding: '10px', border: '1px solid #dee2e6', verticalAlign: 'middle' },
-  tableCellCenter: { padding: '10px', border: '1px solid #dee2e6', textAlign: 'center', verticalAlign: 'middle' },
-  tableCellRight: { padding: '10px', border: '1px solid #dee2e6', textAlign: 'right', verticalAlign: 'middle' },
-  actionButton: { marginRight: '5px', padding: '4px 8px', fontSize: '12px', border: 'none', borderRadius: '3px', cursor: 'pointer', color: 'white' },
-  editButton: { backgroundColor: '#007bff' },
-  deleteButton: { backgroundColor: '#dc3545' },
-  errorText: { color: '#721c24', border: '1px solid #f5c6cb', padding: '10px', borderRadius: '4px', backgroundColor: '#f8d7da', marginBottom: '15px' },
-};
 
 export default UserDeductionsPage;

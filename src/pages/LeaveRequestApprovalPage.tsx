@@ -1,12 +1,9 @@
 // src/pages/LeaveRequestApprovalPage.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-// import { Link } from 'react-router-dom'; // Tidak digunakan di sini
 
-// Ambil API_BASE_URL dari environment variable Vite
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-// Tipe data untuk LeaveRequest yang diterima dari API
 interface LeaveRequest {
   id: string;
   userId: string;
@@ -14,12 +11,7 @@ interface LeaveRequest {
     name: string;
     email: string;
   };
-  leaveType: string; // Di backend Anda, leaveType adalah AttendanceStatus (enum string)
-  // Jika leaveType adalah objek relasi di backend, sesuaikan di sini
-  // leaveType: { 
-  //   id: string;
-  //   name: string;
-  // };
+  leaveType: string;
   startDate: string;
   endDate: string;
   reason: string;
@@ -32,7 +24,6 @@ interface LeaveRequest {
   createdAt: string;
 }
 
-// Tipe untuk respons error umum dari API
 interface ApiErrorResponse {
   message?: string;
   error?: string;
@@ -46,6 +37,7 @@ function LeaveRequestApprovalPage() {
   const { accessToken, user: adminUser } = useAuth();
 
   const fetchPendingLeaveRequests = useCallback(async () => {
+    // ... (logika fetch Anda tidak berubah)
     if (!accessToken || !API_BASE_URL) {
       setError('Token atau URL API tidak tersedia.');
       setIsLoading(false);
@@ -53,7 +45,6 @@ function LeaveRequestApprovalPage() {
     }
     setIsLoading(true);
     setError(null);
-    console.log('LeaveRequestApprovalPage: Fetching pending leave requests...');
     try {
       const response = await fetch(`${API_BASE_URL}/yayasan/leave-requests?status=PENDING_APPROVAL`, {
         headers: { 'Authorization': `Bearer ${accessToken}` },
@@ -62,9 +53,8 @@ function LeaveRequestApprovalPage() {
         const errData = await response.json().catch(() => ({})) as ApiErrorResponse;
         throw new Error(errData.message || errData.error || `Gagal mengambil data pengajuan izin. Status: ${response.status}`);
       }
-      const data: { data: LeaveRequest[] } = await response.json(); // Asumsi API membungkus dalam 'data'
+      const data: { data: LeaveRequest[] } = await response.json();
       setLeaveRequests(data.data || []);
-      console.log('LeaveRequestApprovalPage: Pending leave requests fetched successfully:', data.data);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan.';
       setError(errorMessage);
@@ -75,6 +65,7 @@ function LeaveRequestApprovalPage() {
   }, [accessToken, API_BASE_URL]);
 
   useEffect(() => {
+    // ... (logika useEffect Anda tidak berubah)
     if (adminUser && (adminUser.role === 'YAYASAN' || adminUser.role === 'SUPER_ADMIN')) {
         fetchPendingLeaveRequests();
     } else if (adminUser) {
@@ -84,6 +75,7 @@ function LeaveRequestApprovalPage() {
   }, [fetchPendingLeaveRequests, adminUser]);
 
   const handleLeaveRequestAction = async (leaveRequestId: string, action: 'approve' | 'reject') => {
+    // ... (logika action Anda tidak berubah)
     if (!API_BASE_URL) { setError('URL API tidak ditemukan.'); return; }
     setActionLoading(prev => ({ ...prev, [leaveRequestId]: true }));
     setError(null);
@@ -96,6 +88,7 @@ function LeaveRequestApprovalPage() {
     let rejectionReason: string | null = null;
     if (action === 'reject') {
         rejectionReason = window.prompt("Masukkan alasan penolakan (opsional):");
+        // Jika user cancel prompt, rejectionReason akan null, itu tidak apa-apa
     }
 
     const url = `${API_BASE_URL}/yayasan/leave-requests/${leaveRequestId}/${action}`;
@@ -103,11 +96,10 @@ function LeaveRequestApprovalPage() {
     if (action === 'reject' && rejectionReason && rejectionReason.trim() !== '') {
         body.rejectionReason = rejectionReason;
     }
-
-    console.log(`LeaveRequestApprovalPage: Performing action '${action}' for leave request ID: ${leaveRequestId}`);
+    
     try {
       const response = await fetch(url, {
-        method: 'PUT', // API Anda menggunakan PUT untuk approve/reject
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
@@ -129,78 +121,90 @@ function LeaveRequestApprovalPage() {
     }
   };
 
-  if (isLoading) return <div style={styles.container}>Memuat pengajuan izin...</div>;
-  if (error) return <div style={styles.container}><p style={styles.errorText}>Error: {error}</p></div>;
+  if (isLoading) {
+    return <div className="p-6 text-center text-slate-600">Memuat pengajuan izin...</div>;
+  }
+  if (error) {
+    return (
+      <div className="p-6">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative" role="alert">
+          <strong className="font-bold">Error: </strong>
+          <span className="block sm:inline">{error}</span>
+        </div>
+      </div>
+    );
+  }
   if (adminUser && !(adminUser.role === 'YAYASAN' || adminUser.role === 'SUPER_ADMIN')) {
-      return <div style={styles.container}><p style={styles.errorText}>Akses Ditolak: Anda tidak memiliki izin untuk halaman ini.</p></div>;
+      return (
+        <div className="p-6">
+          <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded-lg relative" role="alert">
+            <strong className="font-bold">Akses Ditolak: </strong>
+            <span className="block sm:inline">Anda tidak memiliki izin untuk halaman ini.</span>
+          </div>
+        </div>
+      );
   }
 
   return (
-    <div style={styles.container}>
-      <h2 style={styles.title}>Approval Pengajuan Izin</h2>
-      <p>Total Pengajuan Pending: {leaveRequests.length}</p>
-      
+    <div className="p-4 md:p-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Approval Pengajuan Izin</h1>
+        <span className="mt-2 sm:mt-0 text-sm text-slate-500">Total Pending: {leaveRequests.length}</span>
+      </div>
+
       {leaveRequests.length === 0 ? (
-        <p>Tidak ada pengajuan izin yang menunggu approval.</p>
+        <div className="bg-white p-6 rounded-xl shadow-lg text-center">
+          <p className="text-slate-600">Tidak ada pengajuan izin yang menunggu approval saat ini.</p>
+        </div>
       ) : (
-        <table style={styles.table}>
-          <thead style={styles.tableHead}>
-            <tr>
-              <th style={styles.tableHeader}>Nama Pengguna</th>
-              <th style={styles.tableHeader}>Tipe Izin</th>
-              <th style={styles.tableHeader}>Tanggal Mulai</th>
-              <th style={styles.tableHeader}>Tanggal Selesai</th>
-              <th style={styles.tableHeader}>Alasan</th>
-              <th style={styles.tableHeader}>Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {leaveRequests.map((req, index) => (
-              <tr key={req.id} style={{...styles.tableRow, backgroundColor: index % 2 === 0 ? '#f9f9f9' : 'white'}}>
-                <td style={styles.tableCell}>{req.user?.name || req.userId}</td>
-                {/* Di backend, leaveType adalah enum AttendanceStatus, jadi kita tampilkan langsung */}
-                <td style={styles.tableCell}>{req.leaveType ? req.leaveType.replace(/_/g, ' ') : 'N/A'}</td>
-                <td style={styles.tableCell}>{new Date(req.startDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
-                <td style={styles.tableCell}>{new Date(req.endDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
-                <td style={styles.tableCell}>{req.reason}</td>
-                <td style={styles.tableCellCenter}>
-                  <button 
-                    onClick={() => handleLeaveRequestAction(req.id, 'approve')}
-                    style={{ ...styles.actionButton, ...styles.approveButton }}
-                    disabled={actionLoading[req.id]}
-                  >
-                    {actionLoading[req.id] ? 'Memproses...' : 'Setujui'}
-                  </button>
-                  <button 
-                    onClick={() => handleLeaveRequestAction(req.id, 'reject')}
-                    style={{ ...styles.actionButton, ...styles.rejectButton }}
-                    disabled={actionLoading[req.id]}
-                  >
-                    {actionLoading[req.id] ? 'Memproses...' : 'Tolak'}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="bg-white rounded-xl shadow-xl overflow-hidden">
+           <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left text-slate-600">
+                <thead className="text-xs text-slate-700 uppercase bg-slate-100">
+                  <tr>
+                    <th scope="col" className="px-6 py-3">Nama Pengguna</th>
+                    <th scope="col" className="px-6 py-3">Tipe Izin</th>
+                    <th scope="col" className="px-6 py-3">Tanggal Mulai</th>
+                    <th scope="col" className="px-6 py-3">Tanggal Selesai</th>
+                    <th scope="col" className="px-6 py-3 min-w-[200px]">Alasan</th>
+                    <th scope="col" className="px-6 py-3 text-center">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {leaveRequests.map((req) => (
+                    <tr key={req.id} className="bg-white border-b hover:bg-slate-50">
+                      <td className="px-6 py-4 font-medium text-slate-900 whitespace-nowrap">{req.user?.name || req.userId}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="capitalize">{req.leaveType ? req.leaveType.replace(/_/g, ' ').toLowerCase() : 'N/A'}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">{new Date(req.startDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">{new Date(req.endDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                      <td className="px-6 py-4 text-xs">{req.reason}</td>
+                      <td className="px-6 py-4 text-center whitespace-nowrap">
+                        <button
+                          onClick={() => handleLeaveRequestAction(req.id, 'approve')}
+                          className="font-medium text-green-600 hover:text-green-800 hover:underline mr-3 text-xs py-1 px-2 rounded bg-green-100 hover:bg-green-200 transition-colors disabled:opacity-50"
+                          disabled={actionLoading[req.id]}
+                        >
+                          {actionLoading[req.id] ? 'Memproses...' : 'Setujui'}
+                        </button>
+                        <button
+                          onClick={() => handleLeaveRequestAction(req.id, 'reject')}
+                          className="font-medium text-red-600 hover:text-red-800 hover:underline text-xs py-1 px-2 rounded bg-red-100 hover:bg-red-200 transition-colors disabled:opacity-50"
+                          disabled={actionLoading[req.id]}
+                        >
+                          {actionLoading[req.id] ? 'Memproses...' : 'Tolak'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+        </div>
       )}
     </div>
   );
 }
-
-const styles: { [key: string]: React.CSSProperties } = {
-  container: { padding: '20px', fontFamily: 'sans-serif' },
-  title: { marginBottom: '20px', color: '#333' },
-  table: { width: '100%', borderCollapse: 'collapse', fontSize: '14px', border: '1px solid #dee2e6', marginTop: '15px' },
-  tableHead: { backgroundColor: '#f8f9fa' },
-  tableHeader: { padding: '10px', border: '1px solid #dee2e6', textAlign: 'left', fontWeight: 'bold' },
-  tableRow: {},
-  tableCell: { padding: '10px', border: '1px solid #dee2e6', verticalAlign: 'middle' },
-  tableCellCenter: { padding: '10px', border: '1px solid #dee2e6', textAlign: 'center', verticalAlign: 'middle' },
-  actionButton: { marginRight: '5px', padding: '6px 10px', fontSize: '13px', border: 'none', borderRadius: '3px', cursor: 'pointer', color: 'white' },
-  approveButton: { backgroundColor: '#28a745' },
-  rejectButton: { backgroundColor: '#dc3545' },
-  errorText: { color: '#721c24', border: '1px solid #f5c6cb', padding: '10px', borderRadius: '4px', backgroundColor: '#f8d7da', marginBottom: '15px' },
-};
 
 export default LeaveRequestApprovalPage;

@@ -1,7 +1,21 @@
 {
+  // Bagian "files" biasanya dikosongkan atau diisi dengan file global .d.ts jika ada.
+  // Mengosongkannya seperti ini adalah umum jika semua file sudah di-include oleh
+  // tsconfig.app.json dan tsconfig.node.json.
   "files": [],
+
+  // Bagian "references" adalah kunci di sini.
+  // Ini memberitahu TypeScript bahwa ada sub-proyek atau bagian lain
+  // dari proyek ini yang memiliki konfigurasi TypeScript-nya sendiri.
   "references": [
+    // Merujuk ke file konfigurasi TypeScript untuk kode aplikasi utama Anda
+    // (misalnya, komponen React, halaman, logika frontend).
+    // Opsi kompilator spesifik untuk kode aplikasi ada di dalam file ini.
     { "path": "./tsconfig.app.json" },
+
+    // Merujuk ke file konfigurasi TypeScript untuk kode yang berjalan di lingkungan Node.js
+    // selama proses development atau build, seperti vite.config.ts atau skrip build lainnya.
+    // Opsi kompilator spesifik untuk kode Node.js ada di dalam file ini.
     { "path": "./tsconfig.node.json" }
   ]
 }
